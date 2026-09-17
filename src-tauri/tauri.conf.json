@@ -39,8 +39,14 @@
     "active": true,
     "targets": ["nsis"],
     "createUpdaterArtifacts": true,
+    "publisher": "stillmvd",
+    "copyright": "© stillmvd",
+    "shortDescription": "Просмотр и редактирование Markdown",
     "windows": {
       "nsis": {
+        "installMode": "perMachine",
+        "languages": ["Russian"],
+        "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "installerHooks": "./windows/hooks.nsh"
       }
