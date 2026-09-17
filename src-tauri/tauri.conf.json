@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MARKDOWN",
+  "version": "../package.json",
+  "identifier": "com.stillmvd.markdown",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1421",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MARKDOWN",
+        "label": "main",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 600,
+        "minHeight": 400,
+        "resizable": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwOTQxRTMwRDc5MkNCMUQKUldRZHk1TFhNQjZVb0ZyMng5d3FIa29zc1crcnBwdjVSVmQyaGg5bzM0elExNGpZUm9Qb3NVR0sK",
+      "endpoints": ["https://github.com/stillmvd/markdown/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "quiet"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerHooks": "./windows/hooks.nsh"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["md"],
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      },
+      {
+        "ext": ["markdown"],
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ]
+  }
+}
