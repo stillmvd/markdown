@@ -1,8 +1,9 @@
+import struct
 import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parent.parent
 LOGO = ROOT / "brand/logo"
@@ -31,6 +32,9 @@ PNG_TARGETS = {
     "StoreLogo.png": 50,
 }
 
+SPLASH_WIDTH = 128
+SPLASH_SCALES = [100, 125, 150, 200]
+
 
 def source_for(size):
     return LOGO / ("mark-small.svg" if size <= SMALL_MAX else "mark.svg")
@@ -52,6 +56,18 @@ def frames(sizes, tmp):
     return result
 
 
+def splash(tmp):
+    for scale in SPLASH_SCALES:
+        path = tmp / f"splash-{scale}.png"
+        render(SPLASH_WIDTH * scale // 100, path)
+        with Image.open(path) as image:
+            rgba = image.convert("RGBA")
+        rgba = rgba.crop(rgba.getbbox())
+        r, g, b, a = rgba.split()
+        bgra = Image.merge("RGBA", [ImageChops.multiply(c, a) for c in (b, g, r)] + [a])
+        (ICONS / f"splash-{scale}.bgra").write_bytes(struct.pack("<II", *rgba.size) + bgra.tobytes())
+
+
 def main():
     if not INKSCAPE.exists():
         sys.exit(f"Inkscape не найден: {INKSCAPE}")
@@ -63,6 +79,7 @@ def main():
     ico = frames(ICO_SIZES, tmp)
     ico[-1].save(ICONS / "icon.ico", format="ICO", sizes=[(s, s) for s in ICO_SIZES], append_images=ico[:-1])
     icns = frames(ICNS_SIZES, tmp)
+    splash(tmp)
     icns[-1].save(ICONS / "icon.icns", format="ICNS", append_images=icns[:-1])
     for image in ico + icns:
         image.close()

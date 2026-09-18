@@ -19,8 +19,8 @@ STROKE = 7.0
 VERTEX = 20.0
 FIELD = 1.0
 
-TOP = "#cdb498"
-BOTTOM = "#7a5c3f"
+TOP = "#ffc233"
+BOTTOM = "#ff5a1f"
 INK_LIGHT = "#17171a"
 INK_DARK = "#ececef"
 
@@ -62,14 +62,14 @@ def path_d(shape, s, tx, ty):
     return "".join(parts)
 
 
-def mark_body(shape, width, fill, cx=32.0, cy=32.0, gid="ginger"):
+def mark_body(shape, width, fill, cx=32.0, cy=32.0, gid="tangerine", top=TOP, bottom=BOTTOM):
     s, tx, ty = fitted(shape, width, cx, cy)
     d = path_d(shape, s, tx, ty)
     if fill != "gradient":
         return f'<path d="{d}" fill="{fill}"/>'
     return (f'<defs><linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="0" y1="{ty:.2f}" x2="0" '
-            f'y2="{ty + s * HEIGHT:.2f}"><stop offset="0" stop-color="{TOP}"/>'
-            f'<stop offset="1" stop-color="{BOTTOM}"/></linearGradient></defs>'
+            f'y2="{ty + s * HEIGHT:.2f}"><stop offset="0" stop-color="{top}"/>'
+            f'<stop offset="1" stop-color="{bottom}"/></linearGradient></defs>'
             f'<path d="{d}" fill="url(#{gid})"/>')
 
 
@@ -109,7 +109,7 @@ def lockup(shape, ink):
     gap = mark_h * 0.42
     d, word_w = word("Markdown", cap, 12 + mark_w + gap, baseline)
     width = 12 + mark_w + gap + word_w + 12
-    body = (mark_body(shape, mark_w, "gradient", 12 + mark_w / 2, 32, "ginger-lockup")
+    body = (mark_body(shape, mark_w, "gradient", 12 + mark_w / 2, 32, "tangerine-lockup")
             + f'<path d="{d}" fill="{ink}"/>')
     return document(body, f"0 0 {width:.2f} 64", f"{width:.2f}", 64)
 

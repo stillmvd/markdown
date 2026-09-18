@@ -8,7 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parent
 PROJECT = ROOT.parent.parent
 FONTS = PROJECT / "src/assets/fonts"
 OUT = ROOT / "logo-page.html"
-WAVES = ["wave1", "wave2", "wave3", "wave4"]
+WAVES = ["wave1", "wave2", "wave3", "wave4", "wave5"]
 INKSCAPE = "C:/Program Files/Inkscape/bin/inkscape.com"
 
 sys.path.insert(0, str(ROOT))
@@ -205,7 +205,7 @@ def logo_inner(name, suffix):
     body = text[text.index(">") + 1:text.rindex("</svg>")]
     view = text[text.index('viewBox="') + 9:]
     view = view[:view.index('"')]
-    for gid in ("ginger-lockup", "ginger"):
+    for gid in ("tangerine-lockup", "tangerine"):
         body = body.replace(f'id="{gid}"', f'id="{gid}-{suffix}"').replace(f"url(#{gid})", f"url(#{gid}-{suffix})")
     return view, body
 
@@ -237,7 +237,7 @@ def final_section():
         f'<span class="tb on">{use("small", 24)}</span><span class="tb"><i></i></span></div></div>'
         for theme in ("light", "dark"))
     return (f'<section class="wave final"><div class="wave-head"><h2>Готовый знак</h2>'
-            f'<p class="prompt">B2′ — жирная лигатура MD, Ginger с объёмом #cdb498 → #7a5c3f, поле 100 %. '
+            f'<p class="prompt">B2′ — жирная лигатура MD, Мандарин #ffc233 → #ff5a1f, поле 100 %. '
             f'Геометрия — brand/logo/generate.py, иконки — brand/make-icons.py: до 32 px включительно берётся '
             f'упрощённый знак с просветами шире.</p></div>'
             f'<svg width="0" height="0" style="position:absolute" aria-hidden="true">{symbols}</svg>'
