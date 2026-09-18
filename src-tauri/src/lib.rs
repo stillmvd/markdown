@@ -1,10 +1,14 @@
+mod splash;
 mod updates;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
+use tauri::window::Color;
 use tauri::{Emitter, Manager};
+use tauri_plugin_store::StoreExt;
 
 type CurrentFile = Arc<Mutex<Option<String>>>;
+type SplashState = Mutex<Option<splash::Splash>>;
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
@@ -116,14 +120,35 @@ fn apply_titlebar_colors(window: &tauri::WebviewWindow, dark: bool) {
 #[cfg(not(windows))]
 fn apply_titlebar_colors(_window: &tauri::WebviewWindow, _dark: bool) {}
 
+fn paint_window(window: &tauri::WebviewWindow, dark: bool) {
+    let (theme, ground) = if dark {
+        (tauri::Theme::Dark, Color(0x14, 0x14, 0x16, 0xff))
+    } else {
+        (tauri::Theme::Light, Color(0xf4, 0xf4, 0xf6, 0xff))
+    };
+    let _ = window.set_theme(Some(theme));
+    let _ = window.set_background_color(Some(ground));
+    apply_titlebar_colors(window, dark);
+}
+
 #[tauri::command]
 fn set_window_theme(window: tauri::WebviewWindow, dark: bool) {
-    let _ = window.set_theme(Some(if dark { tauri::Theme::Dark } else { tauri::Theme::Light }));
-    apply_titlebar_colors(&window, dark);
+    paint_window(&window, dark);
+}
+
+#[tauri::command]
+fn app_ready(window: tauri::WebviewWindow, splash: tauri::State<SplashState>) {
+    let _ = window.show();
+    let _ = window.set_focus();
+    if let Some(splash) = splash.lock().take() {
+        splash.close();
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    let splash: SplashState = Mutex::new(splash::show(&context.config().identifier));
     let current_file: CurrentFile = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
@@ -144,6 +169,7 @@ pub fn run() {
             }
         }))
         .manage(current_file.clone())
+        .manage(splash)
         .manage(updates::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
@@ -151,28 +177,30 @@ pub fn run() {
             get_current_file,
             list_md_files,
             set_window_theme,
+            app_ready,
             updates::update_prepare
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
-                apply_titlebar_colors(&window, true);
+                let dark = app
+                    .store("settings.json")
+                    .ok()
+                    .and_then(|store| store.get("theme"))
+                    .map_or(true, |theme| theme != "light");
+                paint_window(&window, dark);
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(8));
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                });
             }
-            let args: Vec<String> = std::env::args().collect();
-            if let Some(path) = args.get(1) {
-                if is_text_file(path) {
-                    let path_owned = path.clone();
-                    let state = app.state::<CurrentFile>();
-                    *state.lock() = Some(path_owned.clone());
-                    let handle = app.handle().clone();
-                    std::thread::spawn(move || {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
-                        let _ = handle.emit("file-open-request", path_owned);
-                    });
-                }
+            if let Some(path) = std::env::args().nth(1).filter(|path| is_text_file(path)) {
+                *app.state::<CurrentFile>().lock() = Some(path);
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {

@@ -218,6 +218,16 @@ function App() {
     invoke<string | null>("update_prepare").then(setUpdateVersion, () => {});
   }, []);
 
+  const { openFile } = file;
+  useEffect(() => {
+    (async () => {
+      const path = await invoke<string | null>("get_current_file").catch(() => null);
+      if (path && (await openFile(path))) addRecentFile(path);
+      await document.fonts.ready;
+      invoke("app_ready");
+    })();
+  }, [openFile, addRecentFile]);
+
   useEffect(() => {
     const appWindow = getCurrentWindow();
     const unlisten = appWindow.onCloseRequested((event) => {

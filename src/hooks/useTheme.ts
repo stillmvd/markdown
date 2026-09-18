@@ -7,6 +7,9 @@ const STORE_KEY = "theme";
 
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
+  try {
+    localStorage.setItem(STORE_KEY, theme);
+  } catch {}
   invoke("set_window_theme", { dark: theme === "dark" }).catch((e) =>
     console.error("Failed to apply window theme:", e),
   );
