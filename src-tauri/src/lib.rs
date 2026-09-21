@@ -21,6 +21,14 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn paths_exist(paths: Vec<String>) -> Vec<bool> {
+    paths
+        .iter()
+        .map(|p| std::path::Path::new(p).exists())
+        .collect()
+}
+
+#[tauri::command]
 fn get_current_file(state: tauri::State<CurrentFile>) -> Option<String> {
     state.lock().clone()
 }
@@ -175,6 +183,7 @@ pub fn run() {
             read_file,
             write_file,
             get_current_file,
+            paths_exist,
             list_md_files,
             set_window_theme,
             app_ready,

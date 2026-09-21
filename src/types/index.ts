@@ -1,10 +1,13 @@
 export type ViewMode = "view" | "edit";
 export type Theme = "dark" | "light";
 
-export interface RecentFile {
+export type RecentKind = "file" | "folder";
+
+export interface RecentEntry {
   path: string;
   name: string;
   openedAt: number;
+  kind: RecentKind;
 }
 
 export interface HeadingSection {

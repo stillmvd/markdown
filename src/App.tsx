@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
-import type { ViewMode, FileEntry } from "./types";
+import type { ViewMode, FileEntry, RecentEntry } from "./types";
 import { useFile } from "./hooks/useFile";
 import { useTheme } from "./hooks/useTheme";
 import { useRecentFiles } from "./hooks/useRecentFiles";
@@ -24,7 +24,7 @@ import UnsavedDialog from "./components/UnsavedDialog";
 function App() {
   const { theme, toggleTheme } = useTheme();
   const file = useFile();
-  const { recentFiles, addRecentFile } = useRecentFiles();
+  const { recentFiles, addRecentFile, addRecentFolder, removeRecent } = useRecentFiles();
   const [mode, setMode] = useState<ViewMode>("view");
   const [showToc, setShowToc] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -37,7 +37,7 @@ function App() {
   const closedPathRef = useRef<string | null>(null);
   const hasChangesRef = useRef(file.hasChanges);
 
-  const isFileOpen = file.filePath !== null || file.content.length > 0;
+  const isFileOpen = file.filePath !== null || file.isDraft;
   const isPlain = file.filePath !== null && isPlainTextFile(file.filePath);
 
   useEffect(() => {
@@ -67,18 +67,21 @@ function App() {
     })();
   }, [loadFolderFiles]);
 
+  const handleOpenFolderPath = useCallback(async (path: string) => {
+    setFolderPath(path);
+    loadFolderFiles(path);
+    addRecentFolder(path);
+    try {
+      const store = await load("settings.json");
+      await store.set("folderPath", path);
+      await store.save();
+    } catch {}
+  }, [loadFolderFiles, addRecentFolder]);
+
   const handleOpenFolder = useCallback(async () => {
     const selected = await open({ directory: true });
-    if (selected) {
-      setFolderPath(selected);
-      loadFolderFiles(selected);
-      try {
-        const store = await load("settings.json");
-        await store.set("folderPath", selected);
-        await store.save();
-      } catch {}
-    }
-  }, [loadFolderFiles]);
+    if (selected) handleOpenFolderPath(selected);
+  }, [handleOpenFolderPath]);
 
   const handleCloseFolder = useCallback(async () => {
     setFolderPath(null);
@@ -114,15 +117,23 @@ function App() {
   }, [pendingAction, file, handleOpenPath]);
 
   const handleNew = useCallback(() => {
-    guard(file.newFile);
+    guard(() => {
+      file.newFile();
+      setMode("edit");
+    });
   }, [guard, file.newFile]);
+
+  const handleOpenRecent = useCallback((entry: RecentEntry) => {
+    if (entry.kind === "folder") handleOpenFolderPath(entry.path);
+    else handleOpenPath(entry.path);
+  }, [handleOpenFolderPath, handleOpenPath]);
 
   const handleHome = useCallback(() => {
     if (!isFileOpen) return;
     const path = file.filePath;
     guard(() => {
       closedPathRef.current = path;
-      file.newFile();
+      file.closeFile();
       setMode("view");
     });
   }, [isFileOpen, file, guard]);
@@ -283,7 +294,7 @@ function App() {
         mode={mode}
         theme={theme}
         fileName={file.fileName}
-        hasChanges={file.hasChanges}
+        hasChanges={file.hasChanges || file.isDraft}
         isFileOpen={isFileOpen}
         onOpen={handleOpen}
         onSave={handleSave}
@@ -323,7 +334,8 @@ function App() {
             recentFiles={recentFiles}
             onOpen={handleOpen}
             onOpenFolder={handleOpenFolder}
-            onOpenRecent={handleOpenPath}
+            onOpenRecent={handleOpenRecent}
+            onRemoveRecent={removeRecent}
           />
         ) : mode === "view" ? (
           <Viewer

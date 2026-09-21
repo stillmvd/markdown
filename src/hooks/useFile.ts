@@ -11,6 +11,7 @@ export function useFile() {
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDraft, setIsDraft] = useState(false);
 
   const hasChanges = content !== savedContent;
 
@@ -29,6 +30,7 @@ export function useFile() {
     try {
       setIsLoading(true);
       const text = await invoke<string>("read_file", { path });
+      setIsDraft(false);
       setFilePath(path);
       setContent(text);
       setSavedContent(text);
@@ -54,6 +56,7 @@ export function useFile() {
       }
 
       await invoke("write_file", { path: targetPath, content });
+      setIsDraft(false);
       setSavedContent(content);
       return targetPath;
     } catch (e) {
@@ -66,6 +69,14 @@ export function useFile() {
     setFilePath(null);
     setContent("");
     setSavedContent("");
+    setIsDraft(true);
+  }, []);
+
+  const closeFile = useCallback(() => {
+    setFilePath(null);
+    setContent("");
+    setSavedContent("");
+    setIsDraft(false);
   }, []);
 
   return {
@@ -76,9 +87,11 @@ export function useFile() {
     savedContent,
     hasChanges,
     isLoading,
+    isDraft,
     pickFile,
     openFile,
     saveFile,
     newFile,
+    closeFile,
   };
 }

@@ -178,6 +178,10 @@
   margin-block: 28px;
 }
 
+.welcome-sheet {
+  scrollbar-gutter: stable both-edges;
+}
+
 .welcome-sheet::-webkit-scrollbar-track {
   margin-block: 28px;
 }
