@@ -24,6 +24,11 @@ export interface FileEntry {
   children?: FileEntry[];
 }
 
+export interface FolderListing {
+  entries: FileEntry[];
+  truncated: boolean;
+}
+
 export interface DocumentStats {
   words: number;
   characters: number;

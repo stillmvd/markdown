@@ -1,7 +1,35 @@
 import type { HeadingSection } from "../types";
 
+const EMBED = /!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g;
+const CODE = /(```[\s\S]*?```|`[^`\n]*`)/g;
+const WIKI_LINK = /\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g;
+
+function noteTarget(target: string) {
+  const [path, anchor] = target.split("#");
+  const name = path.split("/").pop() ?? path;
+  const extension = name.toLowerCase().split(".").pop() ?? "";
+  const withExtension = LINK_EXTENSIONS.includes(extension) ? path : `${path}.md`;
+  return { path: withExtension, label: anchor ? `${name} › ${anchor}` : name };
+}
+
+function expandOutsideCode(chunk: string): string {
+  return chunk
+    .replace(EMBED, (_, target: string, alias?: string) => `![${alias?.trim() ?? ""}](${encodeURI(target.trim())})`)
+    .replace(WIKI_LINK, (_, target: string, alias?: string) => {
+      const note = noteTarget(target.trim());
+      return `[${alias?.trim() || note.label}](${encodeURI(note.path)})`;
+    });
+}
+
+export function expandWikiLinks(markdown: string): string {
+  return markdown
+    .split(CODE)
+    .map((chunk, i) => (i % 2 === 1 ? chunk : expandOutsideCode(chunk)))
+    .join("");
+}
+
 export function splitByHeadings(markdown: string): HeadingSection[] {
-  const lines = markdown.split("\n");
+  const lines = markdown.split(/\r?\n/);
   const sections: HeadingSection[] = [];
   let currentSection: HeadingSection | null = null;
   let contentLines: string[] = [];
@@ -64,6 +92,7 @@ export function wrapSelection(
 export const MARKDOWN_EXTENSIONS = ["md", "markdown"];
 export const PLAIN_TEXT_EXTENSIONS = ["txt", "text", "log"];
 export const TEXT_EXTENSIONS = [...MARKDOWN_EXTENSIONS, ...PLAIN_TEXT_EXTENSIONS];
+const LINK_EXTENSIONS = [...TEXT_EXTENSIONS, "pdf", "png", "jpg", "jpeg", "gif", "webp", "svg"];
 
 function extensionOf(path: string) {
   const name = path.split(/[\\/]/).pop() ?? "";

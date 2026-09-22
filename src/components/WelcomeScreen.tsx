@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import type { RecentEntry } from "../types";
+import type { RecentEntry, RecentKind } from "../types";
 import { plural } from "../lib/plural";
 import Icon, { type IconName } from "./Icon";
+import PopupMenu, { type MenuAction } from "./PopupMenu";
+import { useCopy, useToast } from "./Toast";
 
 interface WelcomeScreenProps {
   recentFiles: RecentEntry[];
@@ -11,6 +13,7 @@ interface WelcomeScreenProps {
   onOpenFolder: () => void;
   onOpenRecent: (entry: RecentEntry) => void;
   onRemoveRecent: (path: string) => void;
+  onClearRecent: (kind: RecentKind) => void;
 }
 
 const SHORTCUTS = [
@@ -22,14 +25,11 @@ const SHORTCUTS = [
 const KBD = "inline-grid h-[22px] min-w-[22px] place-items-center rounded-full bg-raised px-[7px] font-sans text-[11px] font-bold text-fg";
 
 const DAY = 24 * 60 * 60 * 1000;
-const EDGE = 8;
 
 const VISIBLE_ROWS = 6;
 const VISIBLE_FOLDERS = 2;
 
 const MONTHS = ["янв", "февр", "марта", "апр", "мая", "июня", "июля", "авг", "сент", "окт", "нояб", "дек"];
-
-const clamp = (value: number, max: number) => Math.max(EDGE, Math.min(value, max));
 
 function formatOpenedAt(openedAt: number, now: number) {
   const minutes = Math.floor((now - openedAt) / 60000);
@@ -79,90 +79,72 @@ function Tile({ icon, title, text, accent, onClick }: {
   );
 }
 
-function RecentMenu({ entry, x, y, onClose, onOpen, onRemove }: {
+function recentMenuItems({ entry, onOpen, onRemove, onClear, onCopy }: {
   entry: RecentEntry;
-  x: number;
-  y: number;
-  onClose: () => void;
   onOpen: () => void;
   onRemove: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const onPointerDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("mousedown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("mousedown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
-
-  useLayoutEffect(() => {
-    const menu = ref.current;
-    if (!menu) return;
-    menu.style.left = `${clamp(x, window.innerWidth - menu.offsetWidth - EDGE)}px`;
-    menu.style.top = `${clamp(y, window.innerHeight - menu.offsetHeight - EDGE)}px`;
-  }, [x, y]);
-
-  const run = (action: () => void) => () => {
-    action();
-    onClose();
-  };
-
-  const items: { label: string; icon: IconName; action: () => void }[] = [
+  onClear: () => void;
+  onCopy: (text: string, message: string) => void;
+}): MenuAction[] {
+  return [
     { label: "Открыть", icon: entry.kind === "folder" ? "folder" : "file", action: onOpen },
     { label: "Показать в проводнике", icon: "external", action: () => void revealItemInDir(entry.path).catch(() => {}) },
-    { label: "Скопировать путь", icon: "copy", action: () => void navigator.clipboard.writeText(entry.path).catch(() => {}) },
+    { label: "Скопировать путь", icon: "copy", action: () => onCopy(entry.path, "Путь скопирован") },
     { label: "Убрать из недавних", icon: "close", action: onRemove },
+    {
+      label: entry.kind === "folder" ? "Очистить недавние папки" : "Очистить недавние файлы",
+      icon: "trash",
+      action: onClear,
+    },
   ];
-
-  return (
-    <div ref={ref} className="menu-card fixed z-50">
-      {items.map((item) => (
-        <button key={item.label} type="button" className="menu-row" onClick={run(item.action)}>
-          <Icon name={item.icon} className="h-4 w-4 text-dim" />
-          {item.label}
-        </button>
-      ))}
-    </div>
-  );
 }
 
-function RecentRow({ entry, now, missing, onOpen, onMenu }: {
+function RecentRow({ entry, now, missing, onOpen, onMenu, onRemove }: {
   entry: RecentEntry;
   now: number;
   missing: boolean;
   onOpen: () => void;
   onMenu: (e: React.MouseEvent) => void;
+  onRemove: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className={`side-row min-h-10 gap-2.5 hover:bg-hover ${missing ? "opacity-50" : ""}`}
-      onClick={onOpen}
-      onContextMenu={onMenu}
-      title={entry.path}
-    >
-      <Icon name={entry.kind === "folder" ? "folder" : "file"} className="h-4 w-4 shrink-0 text-dim" />
-      <span className="truncate text-sm font-medium">{entry.name}</span>
-      <span className="min-w-6 truncate text-xs font-medium text-dim [flex-shrink:100]">
-        {parentName(entry.path)}
-      </span>
-      <span className="ml-auto shrink-0 pl-2 text-xs font-medium tabular-nums text-dim">
-        {missing ? "не найден" : entry.openedAt ? formatOpenedAt(entry.openedAt, now) : ""}
-      </span>
-    </button>
+    <div className="group/row relative flex min-w-0">
+      <button
+        type="button"
+        className={`side-row min-h-10 w-full gap-2.5 hover:bg-hover ${missing ? "opacity-50" : ""}`}
+        onClick={onOpen}
+        onContextMenu={onMenu}
+        title={entry.path}
+      >
+        <Icon name={entry.kind === "folder" ? "folder" : "file"} className="h-4 w-4 shrink-0 text-dim" />
+        <span className="truncate text-sm font-medium">{entry.name}</span>
+        <span className="min-w-6 truncate text-xs font-medium text-dim [flex-shrink:100]">
+          {parentName(entry.path)}
+        </span>
+        <span className="ml-auto shrink-0 pl-2 text-xs font-medium tabular-nums text-dim
+          transition-opacity duration-200 ease-trail group-hover/row:opacity-0">
+          {missing ? "не найден" : entry.openedAt ? formatOpenedAt(entry.openedAt, now) : ""}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        title="Убрать из недавних"
+        aria-label={`Убрать «${entry.name}» из недавних`}
+        className="absolute right-1.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full
+          text-dim opacity-0 transition duration-200 ease-trail hover:bg-hover-strong hover:text-fg active:scale-[.96]
+          group-hover/row:opacity-100 focus-visible:opacity-100
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <Icon name="close" className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 }
 
-export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpenRecent, onRemoveRecent }: WelcomeScreenProps) {
+export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpenRecent, onRemoveRecent, onClearRecent }: WelcomeScreenProps) {
+  const toast = useToast();
+  const copy = useCopy();
   const now = Date.now();
   const [expanded, setExpanded] = useState(false);
   const [missing, setMissing] = useState<string[]>([]);
@@ -207,6 +189,7 @@ export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpe
         e.preventDefault();
         setMenu({ entry, x: e.clientX, y: e.clientY });
       }}
+      onRemove={() => onRemoveRecent(entry.path)}
     />
   );
 
@@ -282,13 +265,20 @@ export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpe
       </div>
 
       {menu && (
-        <RecentMenu
-          entry={menu.entry}
+        <PopupMenu
           x={menu.x}
           y={menu.y}
+          items={recentMenuItems({
+            entry: menu.entry,
+            onOpen: () => handleOpenEntry(menu.entry),
+            onRemove: () => onRemoveRecent(menu.entry.path),
+            onClear: () => {
+              onClearRecent(menu.entry.kind);
+              toast(menu.entry.kind === "folder" ? "Недавние папки очищены" : "Недавние файлы очищены");
+            },
+            onCopy: copy,
+          })}
           onClose={() => setMenu(null)}
-          onOpen={() => handleOpenEntry(menu.entry)}
-          onRemove={() => onRemoveRecent(menu.entry.path)}
         />
       )}
     </div>

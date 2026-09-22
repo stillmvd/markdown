@@ -1,15 +1,20 @@
 import { useState, useMemo, useCallback, useRef, isValidElement } from "react";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeRaw from "rehype-raw";
-import { splitByHeadings } from "../lib/markdown-utils";
+import { expandWikiLinks, isTextFile, splitByHeadings } from "../lib/markdown-utils";
 import type { HeadingSection } from "../types";
 import SearchBar from "./SearchBar";
+import { useToast } from "./Toast";
 
 interface ViewerProps {
   content: string;
+  filePath: string | null;
+  folderPath: string | null;
+  onOpenFile: (path: string) => void;
   sheetRef: React.RefObject<HTMLDivElement | null>;
   plain: boolean;
   showSearch: boolean;
@@ -84,6 +89,7 @@ const COPY = (
 );
 
 function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & ExtraProps) {
+  const toast = useToast();
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   const codeClass = isValidElement<{ className?: string }>(children) ? children.props.className ?? "" : "";
@@ -95,8 +101,10 @@ function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & E
       await navigator.clipboard.writeText(preRef.current?.innerText ?? "");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
+      toast("Код скопирован");
     } catch (e) {
       console.error("Failed to copy code:", e);
+      toast("Не удалось скопировать", "error");
     }
   };
 
@@ -119,26 +127,67 @@ function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & E
   );
 }
 
-const COMPONENTS: Components = {
-  pre: CodeBlock,
-  table: ({ node, ...props }) => (
-    <div className="table-wrap">
-      <table {...props} />
-    </div>
-  ),
-  input: ({ node, type, checked, ...props }) =>
-    type === "checkbox" ? (
-      <span className={`task-box${checked ? " is-done" : ""}`} role="img" aria-label={checked ? "Выполнено" : "Не выполнено"}>
-        {CHECK}
-      </span>
-    ) : (
-      <input type={type} checked={checked} {...props} />
-    ),
-};
+const EXTERNAL_SRC = /^(https?:|data:|blob:|file:|asset:)/i;
+const ABSOLUTE_PATH = /^([a-zA-Z]:[\\/]|[\\/])/;
 
-function Markdown({ content }: { content: string }) {
+function dirOf(path: string) {
+  return path.replace(/[\\/][^\\/]*$/, "");
+}
+
+function decode(src: string) {
+  try {
+    return decodeURI(src);
+  } catch {
+    return src;
+  }
+}
+
+function imageSources(src: string, baseDir: string | null, rootDir: string | null) {
+  if (!src || EXTERNAL_SRC.test(src)) return { src, fallback: null };
+  const path = decode(src);
+  if (ABSOLUTE_PATH.test(path)) return { src: convertFileSrc(path), fallback: null };
+  return {
+    src: baseDir ? convertFileSrc(`${baseDir}/${path}`) : src,
+    fallback: rootDir && rootDir !== baseDir ? convertFileSrc(`${rootDir}/${path}`) : null,
+  };
+}
+
+function makeComponents(baseDir: string | null, rootDir: string | null): Components {
+  return {
+    pre: CodeBlock,
+    table: ({ node, ...props }) => (
+      <div className="table-wrap">
+        <table {...props} />
+      </div>
+    ),
+    img: ({ node, src, ...props }) => {
+      const resolved = imageSources(String(src ?? ""), baseDir, rootDir);
+      return (
+        <img
+          {...props}
+          src={resolved.src}
+          loading="lazy"
+          onError={(e) => {
+            const image = e.currentTarget;
+            if (resolved.fallback && image.src !== resolved.fallback) image.src = resolved.fallback;
+          }}
+        />
+      );
+    },
+    input: ({ node, type, checked, ...props }) =>
+      type === "checkbox" ? (
+        <span className={`task-box${checked ? " is-done" : ""}`} role="img" aria-label={checked ? "Выполнено" : "Не выполнено"}>
+          {CHECK}
+        </span>
+      ) : (
+        <input type={type} checked={checked} {...props} />
+      ),
+  };
+}
+
+function Markdown({ content, components }: { content: string; components: Components }) {
   return (
-    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={COMPONENTS}>
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
       {content}
     </ReactMarkdown>
   );
@@ -172,11 +221,11 @@ function HeadingTitle({ level, title }: { level: number; title: string }) {
   );
 }
 
-function CollapsibleSection({ section }: { section: HeadingSection }) {
+function CollapsibleSection({ section, components }: { section: HeadingSection; components: Components }) {
   const [collapsed, setCollapsed] = useState(false);
 
   if (section.level === 0) {
-    return <Markdown content={section.content} />;
+    return <Markdown content={section.content} components={components} />;
   }
 
   return (
@@ -195,28 +244,57 @@ function CollapsibleSection({ section }: { section: HeadingSection }) {
         </HeadingTag>
       </div>
       <div className="doc-section-body" hidden={collapsed}>
-        <Markdown content={section.content} />
+        <Markdown content={section.content} components={components} />
       </div>
     </section>
   );
 }
 
-export default function Viewer({ content, sheetRef, plain, showSearch, onCloseSearch }: ViewerProps) {
-  const sections = useMemo(() => (plain ? [] : splitByHeadings(content)), [plain, content]);
+export default function Viewer({ content, filePath, folderPath, onOpenFile, sheetRef, plain, showSearch, onCloseSearch }: ViewerProps) {
+  const toast = useToast();
+  const baseDir = filePath ? dirOf(filePath) : null;
+  const sections = useMemo(
+    () => (plain ? [] : splitByHeadings(expandWikiLinks(content))),
+    [plain, content],
+  );
+  const components = useMemo(
+    () => makeComponents(baseDir, folderPath),
+    [baseDir, folderPath],
+  );
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     const link = target.closest("a");
-    if (link) {
-      const href = link.getAttribute("href");
-      if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
-        e.preventDefault();
-        import("@tauri-apps/plugin-opener").then(({ openUrl }) => {
-          openUrl(href);
-        });
-      }
+    if (!link) return;
+    const href = link.getAttribute("href");
+    if (!href || href.startsWith("#")) return;
+
+    if (/^[a-z]+:/i.test(href)) {
+      e.preventDefault();
+      import("@tauri-apps/plugin-opener").then(({ openUrl }) => openUrl(href));
+      return;
     }
-  }, []);
+
+    e.preventDefault();
+    const path = decode(href);
+    const candidates = [
+      ABSOLUTE_PATH.test(path) ? path : null,
+      baseDir ? `${baseDir}/${path}` : null,
+      folderPath ? `${folderPath}/${path}` : null,
+    ].filter((item): item is string => item !== null);
+
+    invoke<boolean[]>("paths_exist", { paths: candidates })
+      .then((exists) => {
+        const found = candidates[exists.findIndex(Boolean)];
+        if (!found) {
+          toast("Файл не найден", "error");
+          return;
+        }
+        if (isTextFile(found)) onOpenFile(found);
+        else import("@tauri-apps/plugin-opener").then(({ openPath }) => openPath(found));
+      })
+      .catch(() => toast("Не удалось открыть файл", "error"));
+  }, [baseDir, folderPath, onOpenFile, toast]);
 
   return (
     <div className="min-w-0 flex-1 px-2 pb-2" onClick={handleClick}>
@@ -227,7 +305,7 @@ export default function Viewer({ content, sheetRef, plain, showSearch, onCloseSe
           ) : (
             <article className="markdown-body">
               {sections.map((section, i) => (
-                <CollapsibleSection key={`${section.id}-${i}`} section={section} />
+                <CollapsibleSection key={`${section.id}-${i}`} section={section} components={components} />
               ))}
             </article>
           )}

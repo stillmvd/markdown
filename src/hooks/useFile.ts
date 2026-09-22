@@ -43,26 +43,26 @@ export function useFile() {
     }
   }, []);
 
-  const saveFile = useCallback(async () => {
-    try {
-      let targetPath = filePath;
-      if (!targetPath) {
-        const selected = await save({
-          filters: [MARKDOWN_FILTER, PLAIN_TEXT_FILTER],
-        });
-        if (!selected) return null;
-        targetPath = selected;
-        setFilePath(targetPath);
-      }
+  const adoptPath = useCallback((path: string) => {
+    setFilePath(path);
+    setIsDraft(false);
+  }, []);
 
-      await invoke("write_file", { path: targetPath, content });
-      setIsDraft(false);
-      setSavedContent(content);
-      return targetPath;
-    } catch (e) {
-      console.error("Failed to save file:", e);
-      return null;
+  const saveFile = useCallback(async () => {
+    let targetPath = filePath;
+    if (!targetPath) {
+      const selected = await save({
+        filters: [MARKDOWN_FILTER, PLAIN_TEXT_FILTER],
+      });
+      if (!selected) return null;
+      targetPath = selected;
+      setFilePath(targetPath);
     }
+
+    await invoke("write_file", { path: targetPath, content });
+    setIsDraft(false);
+    setSavedContent(content);
+    return targetPath;
   }, [filePath, content]);
 
   const newFile = useCallback(() => {
@@ -90,6 +90,7 @@ export function useFile() {
     isDraft,
     pickFile,
     openFile,
+    adoptPath,
     saveFile,
     newFile,
     closeFile,

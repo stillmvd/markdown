@@ -29,6 +29,64 @@ fn paths_exist(paths: Vec<String>) -> Vec<bool> {
 }
 
 #[tauri::command]
+fn rename_path(path: String, name: String) -> Result<String, String> {
+    let name = name.trim();
+    if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err("Недопустимое имя".into());
+    }
+    let source = std::path::Path::new(&path);
+    let target = source
+        .parent()
+        .ok_or("Нет родительской папки")?
+        .join(name);
+    if target == source {
+        return Ok(path);
+    }
+    if target.exists() {
+        return Err(format!("«{}» уже существует", name));
+    }
+    std::fs::rename(source, &target).map_err(|e| format!("Не удалось переименовать: {}", e))?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn trash_path(path: String) -> Result<(), String> {
+    trash::delete(&path).map_err(|e| format!("Не удалось удалить: {}", e))
+}
+
+#[tauri::command]
+fn duplicate_path(path: String) -> Result<String, String> {
+    let source = std::path::Path::new(&path);
+    if source.is_dir() {
+        return Err("Папки не дублируются".into());
+    }
+    let parent = source.parent().ok_or("Нет родительской папки")?;
+    let stem = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .ok_or("Нет имени файла")?;
+    let suffix = source
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy()))
+        .unwrap_or_default();
+
+    let target = (1..)
+        .map(|i| {
+            let name = if i == 1 {
+                format!("{} копия{}", stem, suffix)
+            } else {
+                format!("{} копия {}{}", stem, i, suffix)
+            };
+            parent.join(name)
+        })
+        .find(|candidate| !candidate.exists())
+        .ok_or("Нет свободного имени")?;
+
+    std::fs::copy(source, &target).map_err(|e| format!("Не удалось дублировать: {}", e))?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 fn get_current_file(state: tauri::State<CurrentFile>) -> Option<String> {
     state.lock().clone()
 }
@@ -41,8 +99,27 @@ struct FileEntry {
     children: Option<Vec<FileEntry>>,
 }
 
-fn scan_md_files(dir: &std::path::Path) -> Vec<FileEntry> {
+const MAX_DEPTH: usize = 8;
+const SCAN_BUDGET: usize = 20_000;
+const SKIP_DIRS: [&str; 11] = [
+    "node_modules",
+    "appdata",
+    "application data",
+    "$recycle.bin",
+    "system volume information",
+    "target",
+    "dist",
+    "build",
+    "vendor",
+    "__pycache__",
+    "venv",
+];
+
+fn scan_md_files(dir: &std::path::Path, depth: usize, budget: &mut usize) -> Vec<FileEntry> {
     let mut entries = Vec::new();
+    if depth >= MAX_DEPTH || *budget == 0 {
+        return entries;
+    }
     let Ok(read_dir) = std::fs::read_dir(dir) else {
         return entries;
     };
@@ -53,13 +130,26 @@ fn scan_md_files(dir: &std::path::Path) -> Vec<FileEntry> {
         b_dir.cmp(&a_dir).then_with(|| a.file_name().cmp(&b.file_name()))
     });
     for item in items {
+        if *budget == 0 {
+            break;
+        }
+        *budget -= 1;
         let path = item.path();
         let name = item.file_name().to_string_lossy().to_string();
         if name.starts_with('.') {
             continue;
         }
-        if path.is_dir() {
-            let children = scan_md_files(&path);
+        let Ok(file_type) = item.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            if SKIP_DIRS.contains(&name.to_lowercase().as_str()) {
+                continue;
+            }
+            let children = scan_md_files(&path, depth + 1, budget);
             if !children.is_empty() {
                 entries.push(FileEntry {
                     name,
@@ -89,13 +179,24 @@ fn is_text_file(path: &str) -> bool {
         .is_some_and(|ext| TEXT_EXTENSIONS.iter().any(|known| known.eq_ignore_ascii_case(ext)))
 }
 
+#[derive(serde::Serialize)]
+struct FolderListing {
+    entries: Vec<FileEntry>,
+    truncated: bool,
+}
+
 #[tauri::command]
-fn list_md_files(path: String) -> Result<Vec<FileEntry>, String> {
+fn list_md_files(path: String) -> Result<FolderListing, String> {
     let dir = std::path::Path::new(&path);
     if !dir.is_dir() {
         return Err("Not a directory".to_string());
     }
-    Ok(scan_md_files(dir))
+    let mut budget = SCAN_BUDGET;
+    let entries = scan_md_files(dir, 0, &mut budget);
+    Ok(FolderListing {
+        entries,
+        truncated: budget == 0,
+    })
 }
 
 #[cfg(windows)]
@@ -185,6 +286,9 @@ pub fn run() {
             get_current_file,
             paths_exist,
             list_md_files,
+            rename_path,
+            trash_path,
+            duplicate_path,
             set_window_theme,
             app_ready,
             updates::update_prepare

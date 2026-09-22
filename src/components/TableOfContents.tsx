@@ -56,7 +56,7 @@ export default function TableOfContents({ content, sheetRef, onClose }: TableOfC
   const chapter = Math.min(...visible.map((item) => item.level));
 
   return (
-    <SidePanel icon="toc" title="Оглавление" closeLabel="Закрыть оглавление" onClose={onClose}>
+    <SidePanel icon="toc" title="Оглавление" closeLabel="Закрыть оглавление" storageKey="tocPanelWidth" onClose={onClose}>
       {visible.length === 0 ? (
         <SidePanelEmpty icon="toc" title="Заголовков нет" text="Оглавление собирается из строк, которые начинаются с #" />
       ) : (

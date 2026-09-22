@@ -26,13 +26,21 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
     }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEwOTQxRTMwRDc5MkNCMUQKUldRZHk1TFhNQjZVb0ZyMng5d3FIa29zc1crcnBwdjVSVmQyaGg5bzM0elExNGpZUm9Qb3NVR0sK",
-      "endpoints": ["https://github.com/stillmvd/markdown/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://github.com/stillmvd/markdown/releases/latest/download/latest.json"
+      ],
       "windows": {
         "installMode": "quiet"
       }
@@ -40,7 +48,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "createUpdaterArtifacts": true,
     "publisher": "stillmvd",
     "copyright": "© stillmvd",
@@ -48,7 +58,9 @@
     "windows": {
       "nsis": {
         "installMode": "perMachine",
-        "languages": ["Russian"],
+        "languages": [
+          "Russian"
+        ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "installerHooks": "./windows/hooks.nsh"
@@ -63,12 +75,16 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["md"],
+        "ext": [
+          "md"
+        ],
         "mimeType": "text/markdown",
         "role": "Editor"
       },
       {
-        "ext": ["markdown"],
+        "ext": [
+          "markdown"
+        ],
         "mimeType": "text/markdown",
         "role": "Editor"
       }

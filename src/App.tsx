@@ -4,7 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
-import type { ViewMode, FileEntry, RecentEntry } from "./types";
+import type { ViewMode, FileEntry, FolderListing, RecentEntry } from "./types";
 import { useFile } from "./hooks/useFile";
 import { useTheme } from "./hooks/useTheme";
 import { useRecentFiles } from "./hooks/useRecentFiles";
@@ -20,17 +20,20 @@ import { isPlainTextFile, isTextFile } from "./lib/markdown-utils";
 import { SEARCH_INPUT_ID } from "./components/SearchBar";
 import FolderSidebar from "./components/FolderSidebar";
 import UnsavedDialog from "./components/UnsavedDialog";
+import { useToast } from "./components/Toast";
 
 function App() {
+  const toast = useToast();
   const { theme, toggleTheme } = useTheme();
   const file = useFile();
-  const { recentFiles, addRecentFile, addRecentFolder, removeRecent } = useRecentFiles();
+  const { recentFiles, addRecentFile, addRecentFolder, removeRecent, clearRecent } = useRecentFiles();
   const [mode, setMode] = useState<ViewMode>("view");
   const [showToc, setShowToc] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [dragState, setDragState] = useState<DragState>(null);
   const [folderPath, setFolderPath] = useState<string | null>(null);
   const [folderFiles, setFolderFiles] = useState<FileEntry[]>([]);
+  const [folderTruncated, setFolderTruncated] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -46,11 +49,13 @@ function App() {
 
   const loadFolderFiles = useCallback(async (path: string) => {
     try {
-      const files = await invoke<FileEntry[]>("list_md_files", { path });
-      setFolderFiles(files);
+      const listing = await invoke<FolderListing>("list_md_files", { path });
+      setFolderFiles(listing.entries);
+      setFolderTruncated(listing.truncated);
     } catch (e) {
       console.error("Failed to load folder:", e);
       setFolderFiles([]);
+      setFolderTruncated(false);
     }
   }, []);
 
@@ -86,12 +91,28 @@ function App() {
   const handleCloseFolder = useCallback(async () => {
     setFolderPath(null);
     setFolderFiles([]);
+    setFolderTruncated(false);
     try {
       const store = await load("settings.json");
       await store.delete("folderPath");
       await store.save();
     } catch {}
   }, []);
+
+  const refreshFolder = useCallback(() => {
+    if (folderPath) loadFolderFiles(folderPath);
+  }, [folderPath, loadFolderFiles]);
+
+  const handleRenamed = useCallback((from: string, to: string) => {
+    refreshFolder();
+    if (file.filePath === from) file.adoptPath(to);
+  }, [refreshFolder, file]);
+
+  const handleDeleted = useCallback((path: string) => {
+    refreshFolder();
+    const current = file.filePath;
+    if (current === path || current?.startsWith(path + "\\") || current?.startsWith(path + "/")) file.closeFile();
+  }, [refreshFolder, file]);
 
   const guard = useCallback((action: () => void) => {
     if (pendingAction) return;
@@ -144,13 +165,20 @@ function App() {
   }, [isFileOpen, handleOpenPath]);
 
   const handleSave = useCallback(async () => {
-    const path = await file.saveFile();
-    if (path) {
-      setMode("view");
-      addRecentFile(path);
+    try {
+      const path = await file.saveFile();
+      if (path) {
+        setMode("view");
+        addRecentFile(path);
+        toast(`«${path.split(/[\\/]/).pop()}» сохранён`);
+      }
+      return path !== null;
+    } catch (e) {
+      console.error("Failed to save file:", e);
+      toast("Не удалось сохранить файл", "error");
+      return false;
     }
-    return path !== null;
-  }, [file, addRecentFile]);
+  }, [file, addRecentFile, toast]);
 
   const cancelPendingAction = useCallback(() => {
     setPendingAction(null);
@@ -314,10 +342,14 @@ function App() {
         {folderPath && (
           <FolderSidebar
             files={folderFiles}
+            truncated={folderTruncated}
             folderPath={folderPath}
             currentFilePath={file.filePath}
             onFileClick={handleOpenPath}
             onClose={handleCloseFolder}
+            onRefresh={refreshFolder}
+            onRenamed={handleRenamed}
+            onDeleted={handleDeleted}
           />
         )}
 
@@ -336,10 +368,14 @@ function App() {
             onOpenFolder={handleOpenFolder}
             onOpenRecent={handleOpenRecent}
             onRemoveRecent={removeRecent}
+            onClearRecent={clearRecent}
           />
         ) : mode === "view" ? (
           <Viewer
             content={file.content}
+            filePath={file.filePath}
+            folderPath={folderPath}
+            onOpenFile={handleOpenPath}
             sheetRef={sheetRef}
             plain={isPlain}
             showSearch={showSearch}
@@ -362,6 +398,7 @@ function App() {
           content={file.content}
           filePath={file.filePath}
           updateVersion={updateVersion}
+          onOpenFolder={handleOpenFolderPath}
         />
       )}
 

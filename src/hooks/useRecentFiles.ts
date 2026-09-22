@@ -46,6 +46,14 @@ export function useRecentFiles() {
   const addRecentFile = useCallback((path: string) => addRecent(path, "file"), [addRecent]);
   const addRecentFolder = useCallback((path: string) => addRecent(path, "folder"), [addRecent]);
 
+  const clearRecent = useCallback((kind: RecentKind) => {
+    setRecentFiles((prev) => {
+      const updated = prev.filter((f) => f.kind !== kind);
+      persist(updated);
+      return updated;
+    });
+  }, []);
+
   const removeRecent = useCallback((path: string) => {
     setRecentFiles((prev) => {
       const updated = prev.filter((f) => f.path !== path);
@@ -54,5 +62,5 @@ export function useRecentFiles() {
     });
   }, []);
 
-  return { recentFiles, addRecentFile, addRecentFolder, removeRecent };
+  return { recentFiles, addRecentFile, addRecentFolder, removeRecent, clearRecent };
 }
