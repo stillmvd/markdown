@@ -28,6 +28,10 @@ export function expandWikiLinks(markdown: string): string {
     .join("");
 }
 
+export function stripFrontmatter(markdown: string): string {
+  return markdown.replace(/^﻿?---\r?\n[\w-]+:[\s\S]*?\r?\n---[ \t]*(\r?\n|$)/, "");
+}
+
 export function splitByHeadings(markdown: string): HeadingSection[] {
   const lines = markdown.split(/\r?\n/);
   const sections: HeadingSection[] = [];

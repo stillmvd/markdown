@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import rehypeRaw from "rehype-raw";
-import { expandWikiLinks, isTextFile, splitByHeadings } from "../lib/markdown-utils";
+import { expandWikiLinks, isTextFile, splitByHeadings, stripFrontmatter } from "../lib/markdown-utils";
 import type { HeadingSection } from "../types";
 import SearchBar from "./SearchBar";
 import { useToast } from "./Toast";
@@ -254,7 +254,7 @@ export default function Viewer({ content, filePath, folderPath, onOpenFile, shee
   const toast = useToast();
   const baseDir = filePath ? dirOf(filePath) : null;
   const sections = useMemo(
-    () => (plain ? [] : splitByHeadings(expandWikiLinks(content))),
+    () => (plain ? [] : splitByHeadings(expandWikiLinks(stripFrontmatter(content)))),
     [plain, content],
   );
   const components = useMemo(

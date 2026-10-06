@@ -198,6 +198,7 @@
 }
 
 .doc-sheet {
+  container-type: inline-size;
   padding: 40px 48px 48px;
   scroll-padding-top: 40px;
 }
@@ -624,6 +625,22 @@ body:not([data-kbd]) .doc-fold:focus-visible {
   text-decoration-color: var(--line);
 }
 
+.markdown-body :is(.codeblock, .table-wrap) {
+  position: relative;
+  left: 50%;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(1400px, 100cqi);
+  translate: -50%;
+}
+
+.markdown-body :is(li, blockquote) :is(.codeblock, .table-wrap) {
+  left: 0;
+  width: auto;
+  max-width: none;
+  translate: none;
+}
+
 .markdown-body .table-wrap {
   margin: 20px 0;
   border: 1px solid var(--line);
@@ -652,9 +669,24 @@ body:not([data-kbd]) .doc-fold:focus-visible {
   text-align: left;
 }
 
+.markdown-body :is(th, td) {
+  min-width: 10em;
+  vertical-align: top;
+}
+
 .markdown-body td {
   padding: 10px 16px;
   border-top: 1px solid var(--line);
+}
+
+.markdown-body :is(th, td) code {
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.markdown-body :is(th, td):first-child code {
+  overflow-wrap: normal;
 }
 
 .markdown-body img {
