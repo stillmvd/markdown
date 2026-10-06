@@ -59,7 +59,7 @@ function Properties({ project, task }: { project: WorklogProject; task: WorklogT
 
 function Brief({ task }: { task: WorklogTask }) {
   const done = task.status === "done" && task.summary !== "";
-  const [open, setOpen] = useState(!done);
+  const [open, setOpen] = useState(false);
   const { intro, items } = parseSummary(task.summary);
   return (
     <>

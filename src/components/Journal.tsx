@@ -23,10 +23,30 @@ interface JournalProps {
   onClose: () => void;
 }
 
-export function TaskKey({ id, className = "bg-raised" }: { id: string; className?: string }) {
+export function TaskKey({ id, small = false, className = "bg-raised" }: { id: string; small?: boolean; className?: string }) {
+  const copy = useCopy();
+  const [shot, setShot] = useState(0);
   return (
-    <span className={`inline-flex h-[22px] shrink-0 items-center whitespace-nowrap rounded-full px-2 font-mono text-xs font-medium ${className}`}>
-      {id}
+    <span
+      title={`Скопировать ${id}`}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        copy(id, `${id} скопирован`);
+        setShot((n) => n + 1);
+      }}
+      className={`task-key relative inline-flex shrink-0 cursor-copy items-center whitespace-nowrap rounded-full font-mono font-medium
+        ${small ? "h-5 px-[7px] text-[11px]" : "h-[22px] px-2 text-xs"} ${className}`}
+    >
+      <span key={shot} className={`inline-flex items-center ${shot ? "task-key-shake" : ""}`}>
+        {id}
+        <Icon name="copy" className="task-key-icon h-3 w-3 shrink-0" />
+      </span>
+      {shot > 0 && (
+        <span key={`f${shot}`} aria-hidden="true" className="task-key-fly pointer-events-none absolute inset-0 grid place-items-center">
+          {id}
+        </span>
+      )}
     </span>
   );
 }
@@ -224,8 +244,10 @@ function Releases({ project, groups, onOpenTask }: {
   );
 }
 
+const mainlines = new Map<string, string | null>();
+
 function ProjectTasks({ project, onOpenTask }: { project: WorklogProject; onOpenTask: JournalProps["onOpenTask"] }) {
-  const [mainline, setMainline] = useState<{ repo: string; raw: string } | null>(null);
+  const [, setLoaded] = useState(0);
   const [mode, setMode] = useState(() => {
     try {
       return localStorage.getItem(GROUP_KEY) === "status" ? "status" : "releases";
@@ -236,19 +258,19 @@ function ProjectTasks({ project, onOpenTask }: { project: WorklogProject; onOpen
 
   useEffect(() => {
     let alive = true;
-    gitMainline(project.repo).then(
-      (raw) => alive && setMainline({ repo: project.repo, raw }),
-      () => alive && setMainline(null),
-    );
+    const done = (raw: string | null) => {
+      mainlines.set(project.repo, raw);
+      if (alive) setLoaded((n) => n + 1);
+    };
+    gitMainline(project.repo).then(done, () => done(null));
     return () => {
       alive = false;
     };
   }, [project.repo]);
 
-  const groups = useMemo(
-    () => (mainline?.repo === project.repo ? groupByRelease(project, mainline.raw) : null),
-    [mainline, project],
-  );
+  const raw = mainlines.get(project.repo);
+  const loading = raw === undefined;
+  const groups = useMemo(() => (raw ? groupByRelease(project, raw) : null), [raw, project]);
 
   const choose = (next: string) => {
     setMode(next);
@@ -257,7 +279,7 @@ function ProjectTasks({ project, onOpenTask }: { project: WorklogProject; onOpen
     } catch {}
   };
 
-  const segment = groups && (
+  const segment = (groups || loading) && (
     <div role="radiogroup" aria-label="Группировка" className="inline-flex h-10 shrink-0 gap-0.5 self-start rounded-full bg-raised p-1">
       {[["status", "По статусу"], ["releases", "По релизам"]].map(([id, label]) => (
         <button
@@ -282,7 +304,7 @@ function ProjectTasks({ project, onOpenTask }: { project: WorklogProject; onOpen
         <ProjectHead project={project} />
         {segment}
       </div>
-      {groups && mode === "releases" ? (
+      {mode === "releases" && loading ? null : groups && mode === "releases" ? (
         <Releases project={project} groups={groups} onOpenTask={onOpenTask} />
       ) : (
         <TaskGroups project={project} onOpenTask={onOpenTask} />
@@ -337,10 +359,7 @@ function TaskNav({ project, task, onBack, onOpenTask }: {
             className={`side-row pl-1.5 pr-2.5 text-[13px] font-medium
               ${t === task ? "bg-hover-strong shadow-press" : "hover:bg-hover"}`}
           >
-            <span className={`inline-flex h-5 shrink-0 items-center rounded-full px-[7px] font-mono text-[11px] font-medium
-              ${t === task ? "bg-cosmic" : "bg-raised"}`}>
-              {t.id}
-            </span>
+            <TaskKey id={t.id} small className={t === task ? "bg-cosmic" : "bg-raised"} />
             <span className={`truncate ${t.status === "done" && t !== task ? "text-dim" : ""}`}>{t.title}</span>
           </button>
         ))}
@@ -386,12 +405,10 @@ export default function Journal({ projects, error, selected, onSelect, taskId, o
         )}
       </SidePanel>
 
-      <div className="relative min-w-0 flex-1 px-2 pb-2">
+      <div className="wl-stack relative min-w-0 flex-1 px-2 pb-2 [overflow-x:clip]">
         <div
           key={task?.id ?? "list"}
-          onClick={entry ? () => onEntry(null) : undefined}
-          className={`welcome-sheet flex h-full flex-col overflow-y-auto rounded-[28px] bg-cosmic
-            [&>*>*]:transition-opacity [&>*>*]:duration-300 ${entry ? "[&>*>*]:opacity-40" : ""}`}
+          className="welcome-sheet flex h-full flex-col overflow-y-auto rounded-[28px] bg-cosmic"
         >
           <div inert={!!entry} className="contents">
             {error ? (
@@ -407,6 +424,15 @@ export default function Journal({ projects, error, selected, onSelect, taskId, o
             )}
           </div>
         </div>
+        {task && (
+          <div
+            aria-hidden="true"
+            title="К задаче"
+            data-on={entry ? true : undefined}
+            onClick={() => onEntry(null)}
+            className="wl-scrim inset-x-2 bottom-2 top-0 z-10 rounded-[28px]"
+          />
+        )}
         {project && task && sheetEntry && (
           <JournalEntry
             key={sheetEntry.file}

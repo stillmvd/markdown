@@ -127,9 +127,11 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
   const context = [entryKind(entry), shortDate(entry.date), entry.branch].filter(Boolean).join(" · ");
   const closeRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef(document.activeElement as HTMLElement | null);
-  const backRef = useRef<HTMLButtonElement>(null);
+  const diffCloseRef = useRef<HTMLButtonElement>(null);
   const diffOpenerRef = useRef<HTMLElement | null>(null);
   const [diff, setDiff] = useState<DiffTarget | null>(null);
+  const [diffSheet, setDiffSheet] = useState<DiffTarget | null>(null);
+  if (diff && diff !== diffSheet) setDiffSheet(diff);
   const [picker, setPicker] = useState(false);
   const themeRef = useRef<HTMLButtonElement>(null);
   const { theme, choose } = useDiffTheme();
@@ -143,10 +145,11 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
   const closeDiff = () => {
     setPicker(false);
     setDiff(null);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) setDiffSheet(null);
   };
 
   useEffect(() => {
-    if (inDiff) backRef.current?.focus();
+    if (inDiff) diffCloseRef.current?.focus();
     else (diffOpenerRef.current?.isConnected ? diffOpenerRef.current : closeRef.current)?.focus();
   }, [inDiff]);
 
@@ -171,51 +174,21 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
   }, [closing, onClose, diff, picker]);
 
   return (
+    <>
     <div
       role="dialog"
-      aria-modal="true"
+      aria-modal={!inDiff}
       aria-label={entry.title}
       inert={closing}
       data-closing={closing || undefined}
       onAnimationEnd={(e) => {
         if (closing && e.target === e.currentTarget) onClosed();
       }}
-      className={`wl-sheet absolute bottom-4 right-4 top-2 z-20 flex flex-col overflow-hidden
-        rounded-[28px] border border-line bg-cosmic shadow-surface transition-[left] duration-[440ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none
-        ${diff ? "left-4" : "left-[calc(100%_-_16px_-_min(760px,_100%_-_64px))]"}`}
+      className="wl-sheet absolute bottom-4 left-16 right-4 top-2 z-20 flex flex-col overflow-hidden
+        rounded-[28px] border border-line bg-cosmic shadow-surface"
     >
-      <div className={`flex h-14 shrink-0 items-center justify-between pr-3 text-[13px] font-medium text-dim ${diff ? "pl-3" : "pl-7"}`}>
-        {diff ? (
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              ref={backRef}
-              type="button"
-              onClick={closeDiff}
-              title="К записи (Esc)"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-raised pl-2 pr-3 text-fg transition duration-200 ease-trail
-                hover:bg-hover-strong active:scale-[.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Icon name="chevron" className="h-3.5 w-3.5 rotate-180" />
-              Запись
-            </button>
-            <button
-              ref={themeRef}
-              type="button"
-              onClick={() => setPicker((prev) => !prev)}
-              aria-expanded={picker}
-              title="Тема кода"
-              className={`inline-flex h-8 min-w-0 items-center gap-1.5 rounded-full pl-[11px] pr-[9px] text-fg transition duration-200 ease-trail
-                hover:bg-hover-strong active:scale-[.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
-                ${picker ? "bg-hover-strong" : "bg-raised"}`}
-            >
-              <Icon name="palette" className="h-3.5 w-3.5 shrink-0 text-dim" />
-              <span className="truncate">{theme.name}</span>
-              <Icon name="chevron" className={`h-3 w-3 shrink-0 text-dim transition-transform duration-200 ease-trail ${picker ? "-rotate-90" : "rotate-90"}`} />
-            </button>
-          </div>
-        ) : (
-          <span className="truncate">{task.id} · {entryKind(entry).split(" · ")[0]}</span>
-        )}
+      <div inert={inDiff} className="flex h-14 shrink-0 items-center justify-between pl-7 pr-3 text-[13px] font-medium text-dim">
+        <span className="truncate">{task.id} · {entryKind(entry).split(" · ")[0]}</span>
         <button
           ref={closeRef}
           type="button"
@@ -229,10 +202,7 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
           <Icon name="close" />
         </button>
       </div>
-      {diff && hash && (
-        <JournalDiff project={project} entry={entry} hash={hash} target={diff} theme={theme} picker={picker} onPick={choose} />
-      )}
-      <div hidden={inDiff} className="welcome-sheet min-h-0 flex-1 overflow-y-auto px-7 pb-7">
+      <div inert={inDiff} className="welcome-sheet min-h-0 flex-1 overflow-y-auto px-7 pb-7">
         <div className="flex flex-col gap-5">
           <div className="flex min-w-0 flex-col gap-3.5">
             <div className="flex flex-wrap items-start gap-x-4 gap-y-3">
@@ -264,13 +234,65 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
             <div className="text-[13px] font-medium tabular-nums text-dim">{context}</div>
           </div>
           {entry.summary && (
-            <p className="border-l-2 border-line pl-4 text-[15px] leading-[1.6] [overflow-wrap:anywhere]">
+            <p className="max-w-[80ch] border-l-2 border-line pl-4 text-[15px] leading-[1.6] [overflow-wrap:anywhere]">
               <Inline text={entry.summary} />
             </p>
           )}
           <Changes entry={entry} onDiff={hash ? openDiff : null} />
         </div>
       </div>
+      <div
+        aria-hidden="true"
+        title="К записи"
+        data-on={(inDiff && !closing) || undefined}
+        onClick={closeDiff}
+        className="wl-scrim wl-scrim-soft inset-0"
+      />
     </div>
+    {diffSheet && hash && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Дифф ${hash.slice(0, 7)}`}
+        inert={closing || !inDiff}
+        data-closing={closing || !inDiff || undefined}
+        onAnimationEnd={(e) => {
+          if (!inDiff && e.target === e.currentTarget) setDiffSheet(null);
+        }}
+        className="wl-sheet wl-diff absolute bottom-4 left-28 right-4 top-2 z-30 flex flex-col overflow-hidden
+          rounded-[28px] border border-line bg-cosmic shadow-surface"
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between pl-3 pr-3 text-[13px] font-medium text-dim">
+          <button
+            ref={themeRef}
+            type="button"
+            onClick={() => setPicker((prev) => !prev)}
+            aria-expanded={picker}
+            title="Тема кода"
+            className={`inline-flex h-8 min-w-0 items-center gap-1.5 rounded-full pl-[11px] pr-[9px] text-fg transition duration-200 ease-trail
+              hover:bg-hover-strong active:scale-[.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
+              ${picker ? "bg-hover-strong" : "bg-raised"}`}
+          >
+            <Icon name="palette" className="h-3.5 w-3.5 shrink-0 text-dim" />
+            <span className="truncate">{theme.name}</span>
+            <Icon name="chevron" className={`h-3 w-3 shrink-0 text-dim transition-transform duration-200 ease-trail ${picker ? "-rotate-90" : "rotate-90"}`} />
+          </button>
+          <button
+            ref={diffCloseRef}
+            type="button"
+            onClick={closeDiff}
+            title="К записи (Esc)"
+            aria-label="Закрыть дифф"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-dim transition duration-200 ease-trail
+              hover:bg-hover-strong hover:text-fg active:scale-[.96]
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Icon name="close" />
+          </button>
+        </div>
+        <JournalDiff project={project} entry={entry} hash={hash} target={diffSheet} theme={theme} picker={picker} onPick={choose} />
+      </div>
+    )}
+    </>
   );
 }

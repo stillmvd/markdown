@@ -221,6 +221,32 @@ function App() {
     });
   }, [isFileOpen, file, guard, journalTask, journalEntry]);
 
+  const closeJournal = useCallback(() => {
+    setJournalTask(null);
+    setJournalEntry(null);
+    setJournalOpen(false);
+  }, []);
+
+  const handleGoHome = useCallback(() => {
+    if (isFileOpen) handleHome();
+    else closeJournal();
+  }, [isFileOpen, handleHome, closeJournal]);
+
+  const handleToolbarJournal = useCallback(() => {
+    if (!isFileOpen) {
+      if (journalOpen) closeJournal();
+      else handleOpenJournal();
+      return;
+    }
+    const path = file.filePath;
+    guard(() => {
+      closedPathRef.current = path;
+      file.closeFile();
+      setMode("view");
+      handleOpenJournal();
+    });
+  }, [isFileOpen, journalOpen, file, guard, closeJournal, handleOpenJournal]);
+
   const handleForward = useCallback(() => {
     const path = closedPathRef.current;
     if (!isFileOpen && path) handleOpenPath(path);
@@ -397,7 +423,7 @@ function App() {
         onOpen={handleOpen}
         onSave={handleSave}
         onNew={handleNew}
-        onHome={handleHome}
+        onHome={handleGoHome}
         onOpenFolder={handleOpenFolder}
         onToggleMode={handleToggleMode}
         onToggleTheme={toggleTheme}
@@ -406,6 +432,8 @@ function App() {
         onToggleSearch={handleToggleSearch}
         showSearch={showSearch}
         onExportPdf={handleExportPdf}
+        journalOpen={showJournal}
+        onOpenJournal={handleToolbarJournal}
       />
 
       <div className="relative flex flex-1 overflow-hidden">
@@ -455,20 +483,13 @@ function App() {
             entryFile={journalEntry}
             onEntry={setJournalEntry}
             onOpenTask={handleOpenTask}
-            onClose={() => {
-              setJournalTask(null);
-              setJournalEntry(null);
-              setJournalOpen(false);
-            }}
+            onClose={closeJournal}
           />
         ) : !isFileOpen ? (
           <WelcomeScreen
             activeTasks={activeTasks}
-            onOpenJournal={handleOpenJournal}
             onOpenTask={handleOpenTask}
             recentFiles={recentFiles}
-            onOpen={handleOpen}
-            onOpenFolder={handleOpenFolder}
             onOpenRecent={handleOpenRecent}
             onRemoveRecent={removeRecent}
             onClearRecent={clearRecent}

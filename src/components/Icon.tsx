@@ -35,6 +35,9 @@ const ICONS = {
     </g>
   ),
   close: <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />,
+  winMin: <path d="M3.5 8h9" />,
+  winMax: <rect x="3.75" y="3.75" width="8.5" height="8.5" rx="1.5" />,
+  winRestore: <path d="M5.75 5.75V4.5a1 1 0 0 1 1-1h4.75a1 1 0 0 1 1 1v4.75a1 1 0 0 1-1 1h-1.25M3.5 6.75a1 1 0 0 1 1-1h4.75a1 1 0 0 1 1 1v4.75a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1z" />,
   check: <path d="M3.25 8.5 6.5 11.75 12.75 4.75" />,
   alert: (
     <>

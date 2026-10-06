@@ -70,6 +70,8 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
 }) {
   const [shown, setShown] = useState<Record<number, { lines: DiffLine[]; html: string[] }>>({});
   const [failed, setFailed] = useState(false);
+  const [body, setBody] = useState<"idle" | "grow" | null>(folded ? null : "idle");
+  if (!folded && !body) setBody("grow");
   const contentRef = useRef<Promise<string[]> | null>(null);
   const lang = useMemo(() => languageOf(file.path), [file.path]);
   const hunkHtml = useMemo(() => file.hunks.map((hunk) => highlightHunk(hunk, lang)), [file, lang]);
@@ -104,10 +106,11 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
           type="button"
           onClick={onToggle}
           aria-expanded={!folded}
+          data-shut={(folded && !body) || undefined}
           title={file.path}
           className={`df-fh flex min-h-11 w-full min-w-0 items-center gap-3 px-4 text-left
             focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent
-            ${folded ? "rounded-[19px]" : "rounded-t-[19px]"}`}
+            ${folded && !body ? "rounded-[19px]" : "rounded-t-[19px]"}`}
         >
           <Icon name="chevron" className={`df-muted -ml-1 h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-trail ${folded ? "" : "rotate-90"}`} />
           <span className="flex min-w-0 flex-1 font-mono text-[13px]">
@@ -118,7 +121,17 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
           <Bar file={file} />
         </button>
       </div>
-      {folded ? null : file.binary || file.hunks.length === 0 ? (
+      {body && (
+      <div
+        data-folded={folded || undefined}
+        data-grow={body === "grow" || undefined}
+        onTransitionEnd={(e) => {
+          if (folded && e.target === e.currentTarget) setBody(null);
+        }}
+        className="df-body grid"
+      >
+      <div inert={folded} className="min-h-0 overflow-hidden">
+      {file.binary || file.hunks.length === 0 ? (
         <div className="df-muted px-4 py-3 text-[13px]">
           {file.binary
             ? "Двоичный файл — изменения не показываются"
@@ -154,6 +167,9 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
             })}
           </div>
         </div>
+      )}
+      </div>
+      </div>
       )}
     </section>
   );

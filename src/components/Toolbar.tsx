@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { ViewMode, Theme } from "../types";
 import Icon, { type IconName } from "./Icon";
 
@@ -21,6 +22,89 @@ interface ToolbarProps {
   onToggleSearch: () => void;
   showSearch: boolean;
   onExportPdf: () => void;
+  journalOpen: boolean;
+  onOpenJournal: () => void;
+}
+
+function NavButton({ icon, label, title, pressed, onClick }: {
+  icon: IconName;
+  label: string;
+  title?: string;
+  pressed?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title ?? label}
+      aria-label={label}
+      aria-pressed={pressed}
+      className={`tb-nav ${pressed ? "bg-hover-strong" : ""}`}
+    >
+      <Icon name={icon} />
+      <span className="tb-label">{label}</span>
+    </button>
+  );
+}
+
+function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+  const dark = theme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="tb-island"
+      title={dark ? "Светлая тема" : "Тёмная тема"}
+      aria-label={dark ? "Включить светлую тему" : "Включить тёмную тему"}
+    >
+      <svg viewBox="0 0 24 24" className="theme-icon h-5 w-5" data-dark={dark || undefined} aria-hidden="true">
+        <mask id="theme-icon-bite">
+          <rect width="24" height="24" fill="#fff" />
+          <circle className="theme-icon-bite" fill="#000" />
+        </mask>
+        <circle className="theme-icon-core" cx="12" cy="12" fill="currentColor" mask="url(#theme-icon-bite)" />
+        <g className="theme-icon-rays" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M12 1.5v2M12 20.5v2M1.5 12h2M20.5 12h2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M4.6 19.4 6 18M18 6l1.4-1.4" />
+        </g>
+      </svg>
+    </button>
+  );
+}
+
+function WindowControls() {
+  const [maximized, setMaximized] = useState(false);
+
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    appWindow.isMaximized().then(setMaximized);
+    const unlisten = appWindow.onResized(() => {
+      appWindow.isMaximized().then(setMaximized);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  return (
+    <div className="flex shrink-0 items-center gap-1 pl-1" role="group" aria-label="Окно">
+      <button type="button" onClick={() => getCurrentWindow().minimize()} className="tb-win" title="Свернуть" aria-label="Свернуть">
+        <Icon name="winMin" />
+      </button>
+      <button
+        type="button"
+        onClick={() => getCurrentWindow().toggleMaximize()}
+        className="tb-win"
+        title={maximized ? "Восстановить" : "Развернуть"}
+        aria-label={maximized ? "Восстановить" : "Развернуть"}
+      >
+        <Icon name={maximized ? "winRestore" : "winMax"} />
+      </button>
+      <button type="button" onClick={() => getCurrentWindow().close()} className="tb-win tb-win-close" title="Закрыть" aria-label="Закрыть">
+        <Icon name="close" />
+      </button>
+    </div>
+  );
 }
 
 export default function Toolbar({
@@ -42,30 +126,9 @@ export default function Toolbar({
   onToggleSearch,
   showSearch,
   onExportPdf,
+  journalOpen,
+  onOpenJournal,
 }: ToolbarProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [menuOpen]);
-
   const modeButton = (target: ViewMode, icon: IconName, label: string) => {
     const active = mode === target;
     return (
@@ -82,147 +145,84 @@ export default function Toolbar({
     );
   };
 
-  const themeButton = (target: Theme, label: string) => {
-    const active = theme === target;
-    return (
-      <button
-        type="button"
-        onClick={active ? undefined : onToggleTheme}
-        className={`h-8 flex-1 rounded-full text-[13px] transition duration-200 ease-trail active:scale-[.96]
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent
-          ${active ? "bg-hover-strong font-bold text-fg shadow-press" : "font-medium text-dim hover:bg-hover-strong hover:text-fg"}`}
-        aria-pressed={active}
-      >
-        {label}
-      </button>
-    );
-  };
-
   return (
-    <div className="shrink-0 bg-ground p-2 select-none" data-tauri-drag-region>
-      <div
-        className="relative flex h-[52px] items-center gap-1.5 rounded-full bg-cosmic px-1.5 shadow-island"
-        data-tauri-drag-region
-      >
-        <div className="tb-group" role="group" aria-label="Файл">
-          {canGoHome && (
-            <button type="button" onClick={onHome} className="tb-dot" title="На главный (Ctrl+W)" aria-label="На главный">
-              <Icon name="home" />
-            </button>
-          )}
-          <button type="button" onClick={onNew} className="tb-dot" title="Новый файл" aria-label="Новый файл">
-            <Icon name="plus" />
-          </button>
-          <button type="button" onClick={onOpen} className="tb-dot" title="Открыть (Ctrl+O)" aria-label="Открыть">
-            <Icon name="file" />
-          </button>
-          <button type="button" onClick={onOpenFolder} className="tb-dot" title="Открыть папку" aria-label="Открыть папку">
-            <Icon name="folder" />
-          </button>
-        </div>
+    <div className="relative flex h-16 shrink-0 items-center gap-2 bg-ground px-2 py-3 select-none" data-tauri-drag-region>
+      {canGoHome && <NavButton icon="home" label="Главная" title="На главный (Ctrl+W)" onClick={onHome} />}
+      <NavButton icon="plus" label="Новый файл" onClick={onNew} />
+      <NavButton icon="file" label="Открыть файл" title="Открыть файл (Ctrl+O)" onClick={onOpen} />
+      <NavButton icon="folder" label="Открыть папку" onClick={onOpenFolder} />
+      <NavButton icon="book" label="Журнал" pressed={journalOpen} onClick={onOpenJournal} />
 
-        {isFileOpen && (
-          hasChanges ? (
-            <button
-              type="button"
-              onClick={onSave}
-              className="tb-capsule bg-accent font-bold text-accent-ink hover:bg-accent-hover active:scale-[.96]"
-              title="Сохранить (Ctrl+S)"
-            >
-              Сохранить
-            </button>
-          ) : (
-            <button type="button" disabled className="tb-capsule cursor-default bg-raised font-medium text-dim">
-              Сохранено
-            </button>
-          )
-        )}
-
-        {fileName && (
-          <div className="pointer-events-none absolute left-1/2 top-1/2 flex max-w-[30%] -translate-x-1/2 -translate-y-1/2 items-center gap-2 max-[720px]:hidden">
-            <span className="truncate text-sm font-medium text-fg">{fileName}</span>
-            {hasChanges && (
-              <>
-                <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
-                <span className="sr-only">есть несохранённые правки</span>
-              </>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 self-stretch" data-tauri-drag-region />
-
-        {isFileOpen && (
-          <>
-            <div className="tb-group" role="group" aria-label="Режим">
-              {modeButton("view", "eye", "Чтение")}
-              {modeButton("edit", "pencil", "Правка")}
-            </div>
-
-            {mode === "view" && (
-              <button
-                type="button"
-                onClick={onToggleSearch}
-                className={`tb-circle ${showSearch ? "bg-fg text-ground hover:bg-fg" : ""}`}
-                title="Найти (Ctrl+F)"
-                aria-label="Найти"
-                aria-pressed={showSearch}
-              >
-                <Icon name="search" />
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onToggleToc}
-              className={`tb-circle ${showToc ? "bg-fg text-ground hover:bg-fg" : ""}`}
-              title="Оглавление"
-              aria-label="Оглавление"
-              aria-pressed={showToc}
-            >
-              <Icon name="toc" />
-            </button>
-          </>
-        )}
-
-        <div ref={menuRef} className="relative">
+      {isFileOpen && (
+        hasChanges ? (
           <button
-            ref={triggerRef}
             type="button"
-            onClick={() => setMenuOpen((open) => !open)}
-            className="tb-circle"
-            title="Ещё"
-            aria-label="Ещё"
-            aria-haspopup="true"
-            aria-expanded={menuOpen}
+            onClick={onSave}
+            className="tb-capsule bg-accent px-4 text-[13px] font-bold text-accent-ink shadow-island hover:bg-accent-hover active:scale-[.96]"
+            title="Сохранить (Ctrl+S)"
           >
-            <Icon name="more" />
+            Сохранить
           </button>
+        ) : (
+          <button type="button" disabled className="tb-capsule cursor-default bg-cosmic px-4 text-[13px] font-medium text-dim shadow-island">
+            Сохранено
+          </button>
+        )
+      )}
 
-          {menuOpen && (
-            <div className="menu-card absolute right-0 top-[calc(100%+12px)] z-30">
-              {isFileOpen && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onExportPdf();
-                  }}
-                  className="menu-row"
-                >
-                  <Icon name="pdf" />
-                  Экспорт в PDF
-                </button>
-              )}
-              <span className="px-3.5 pb-0.5 pt-2 text-xs font-medium text-dim">Тема</span>
-              <div className="flex h-10 gap-0.5 rounded-full bg-raised p-1" role="group" aria-label="Тема">
-                {themeButton("dark", "Тёмная")}
-                {themeButton("light", "Светлая")}
-              </div>
-            </div>
+      {fileName && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 flex max-w-[24%] -translate-x-1/2 -translate-y-1/2 items-center gap-2 max-[1760px]:hidden">
+          <span className="truncate text-sm font-medium text-fg">{fileName}</span>
+          {hasChanges && (
+            <>
+              <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden="true" />
+              <span className="sr-only">есть несохранённые правки</span>
+            </>
           )}
         </div>
-      </div>
+      )}
+
+      <div className="flex-1 self-stretch" data-tauri-drag-region />
+
+      {isFileOpen && (
+        <>
+          <div className="tb-group bg-cosmic shadow-island" role="group" aria-label="Режим">
+            {modeButton("view", "eye", "Чтение")}
+            {modeButton("edit", "pencil", "Правка")}
+          </div>
+
+          {mode === "view" && (
+            <button
+              type="button"
+              onClick={onToggleSearch}
+              className={`tb-island ${showSearch ? "bg-fg text-ground hover:bg-fg" : ""}`}
+              title="Найти (Ctrl+F)"
+              aria-label="Найти"
+              aria-pressed={showSearch}
+            >
+              <Icon name="search" />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onToggleToc}
+            className={`tb-island ${showToc ? "bg-fg text-ground hover:bg-fg" : ""}`}
+            title="Оглавление"
+            aria-label="Оглавление"
+            aria-pressed={showToc}
+          >
+            <Icon name="toc" />
+          </button>
+
+          <button type="button" onClick={onExportPdf} className="tb-island" title="Экспорт в PDF" aria-label="Экспорт в PDF">
+            <Icon name="pdf" />
+          </button>
+        </>
+      )}
+
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+      <WindowControls />
     </div>
   );
 }
