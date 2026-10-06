@@ -1,5 +1,6 @@
 mod splash;
 mod updates;
+mod worklog;
 
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -291,7 +292,10 @@ pub fn run() {
             duplicate_path,
             set_window_theme,
             app_ready,
-            updates::update_prepare
+            updates::update_prepare,
+            worklog::worklog_read,
+            worklog::git_show,
+            worklog::git_file
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

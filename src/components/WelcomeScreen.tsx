@@ -6,6 +6,8 @@ import { plural } from "../lib/plural";
 import Icon, { type IconName } from "./Icon";
 import PopupMenu, { type MenuAction } from "./PopupMenu";
 import { useCopy, useToast } from "./Toast";
+import type { WorklogProject, WorklogTask } from "../lib/worklog";
+import { TaskKey } from "./Journal";
 
 interface WelcomeScreenProps {
   recentFiles: RecentEntry[];
@@ -14,6 +16,9 @@ interface WelcomeScreenProps {
   onOpenRecent: (entry: RecentEntry) => void;
   onRemoveRecent: (path: string) => void;
   onClearRecent: (kind: RecentKind) => void;
+  activeTasks: { project: WorklogProject; task: WorklogTask }[];
+  onOpenJournal: () => void;
+  onOpenTask: (project: WorklogProject, task: WorklogTask) => void;
 }
 
 const SHORTCUTS = [
@@ -142,7 +147,7 @@ function RecentRow({ entry, now, missing, onOpen, onMenu, onRemove }: {
   );
 }
 
-export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpenRecent, onRemoveRecent, onClearRecent }: WelcomeScreenProps) {
+export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpenRecent, onRemoveRecent, onClearRecent, activeTasks, onOpenJournal, onOpenTask }: WelcomeScreenProps) {
   const toast = useToast();
   const copy = useCopy();
   const now = Date.now();
@@ -207,14 +212,40 @@ export default function WelcomeScreen({ recentFiles, onOpen, onOpenFolder, onOpe
   return (
     <div className="min-w-0 flex-1 px-2 pb-2">
       <div className="welcome-sheet flex h-full flex-col overflow-y-auto rounded-[28px] bg-cosmic">
-        <div className="m-auto flex w-[460px] max-w-full flex-col gap-7 px-6 py-8">
+        <div className="m-auto flex w-[664px] max-w-full flex-col gap-7 px-6 py-8">
           <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,200px))] justify-center gap-2">
             <Tile icon="file" title="Открыть файл" text=".md, .txt или .log с диска" accent onClick={onOpen} />
             <Tile icon="folder" title="Открыть папку" text="Дерево заметок слева" onClick={onOpenFolder} />
+            <Tile icon="book" title="Журнал" text="Задачи и коммиты по проектам" onClick={onOpenJournal} />
           </div>
 
+          {activeTasks.length > 0 && (
+            <div className="mx-auto flex w-[460px] max-w-full flex-col gap-2">
+              <div className="flex min-h-8 items-center pl-3 text-[15px] font-bold">Сейчас в работе</div>
+              <div className="flex flex-col gap-0.5">
+                {activeTasks.map(({ project, task }) => (
+                  <button
+                    key={`${project.slug}/${task.id}`}
+                    type="button"
+                    onClick={() => onOpenTask(project, task)}
+                    title={task.title}
+                    className="side-row min-h-10 w-full gap-2.5 hover:bg-hover"
+                  >
+                    <TaskKey id={task.id} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{task.title}</span>
+                    {task.phasesTotal > 0 && (
+                      <span className="shrink-0 text-xs font-medium tabular-nums text-dim">
+                        {task.phasesDone} из {task.phasesTotal}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {recentFiles.length > 0 && (
-            <div className="flex flex-col gap-4">
+            <div className="mx-auto flex w-[460px] max-w-full flex-col gap-4">
               {groups.map((group) => group.base.length > 0 && (
                 <div key={group.kind} className="flex flex-col gap-2">
                   <div className="flex min-h-8 items-center pl-3 text-[15px] font-bold">

@@ -8,6 +8,7 @@ interface ToolbarProps {
   fileName: string | null;
   hasChanges: boolean;
   isFileOpen: boolean;
+  canGoHome: boolean;
   onOpen: () => void;
   onSave: () => void;
   onNew: () => void;
@@ -28,6 +29,7 @@ export default function Toolbar({
   fileName,
   hasChanges,
   isFileOpen,
+  canGoHome,
   onOpen,
   onSave,
   onNew,
@@ -103,7 +105,7 @@ export default function Toolbar({
         data-tauri-drag-region
       >
         <div className="tb-group" role="group" aria-label="Файл">
-          {isFileOpen && (
+          {canGoHome && (
             <button type="button" onClick={onHome} className="tb-dot" title="На главный (Ctrl+W)" aria-label="На главный">
               <Icon name="home" />
             </button>

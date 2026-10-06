@@ -21,6 +21,21 @@ import { SEARCH_INPUT_ID } from "./components/SearchBar";
 import FolderSidebar from "./components/FolderSidebar";
 import UnsavedDialog from "./components/UnsavedDialog";
 import { useToast } from "./components/Toast";
+import Journal from "./components/Journal";
+import PanelReveal from "./components/PanelReveal";
+import Icon from "./components/Icon";
+import { loadWorklog, type WorklogProject, type WorklogTask } from "./lib/worklog";
+import { plural } from "./lib/plural";
+
+const JOURNAL_PROJECT_KEY = "journal-project";
+
+function readJournalProject() {
+  try {
+    return localStorage.getItem(JOURNAL_PROJECT_KEY);
+  } catch {
+    return null;
+  }
+}
 
 function App() {
   const toast = useToast();
@@ -36,12 +51,52 @@ function App() {
   const [folderTruncated, setFolderTruncated] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [journalProject, setJournalProject] = useState<string | null>(readJournalProject);
+  const [journalTask, setJournalTask] = useState<string | null>(null);
+  const [journalEntry, setJournalEntry] = useState<string | null>(null);
+  const [worklog, setWorklog] = useState<{ root: string; projects: WorklogProject[] } | null>(null);
+  const [worklogError, setWorklogError] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const closedPathRef = useRef<string | null>(null);
   const hasChangesRef = useRef(file.hasChanges);
 
   const isFileOpen = file.filePath !== null || file.isDraft;
   const isPlain = file.filePath !== null && isPlainTextFile(file.filePath);
+  const showJournal = journalOpen && !isFileOpen;
+
+  const reloadWorklog = useCallback(() => {
+    loadWorklog().then(
+      (data) => {
+        setWorklog(data);
+        setWorklogError(null);
+      },
+      (e) => setWorklogError(String(e)),
+    );
+  }, []);
+
+  useEffect(reloadWorklog, [reloadWorklog]);
+
+  const activeTasks = useMemo(
+    () => (worklog?.projects ?? [])
+      .flatMap((project) => project.tasks.filter((task) => task.status !== "done").map((task) => ({ project, task })))
+      .sort((a, b) => b.task.lastActivity.localeCompare(a.task.lastActivity))
+      .slice(0, 2),
+    [worklog],
+  );
+  const taskCount = worklog?.projects.reduce((n, p) => n + p.tasks.length, 0) ?? 0;
+
+  const handleOpenJournal = useCallback(() => {
+    reloadWorklog();
+    setJournalOpen(true);
+  }, [reloadWorklog]);
+
+  const handleSelectJournalProject = useCallback((slug: string) => {
+    setJournalProject(slug);
+    try {
+      localStorage.setItem(JOURNAL_PROJECT_KEY, slug);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     hasChangesRef.current = file.hasChanges;
@@ -127,6 +182,7 @@ function App() {
         closedPathRef.current = null;
         addRecentFile(result);
         setMode("view");
+        setJournalOpen(false);
       }
     });
   }, [guard, file, addRecentFile]);
@@ -141,6 +197,7 @@ function App() {
     guard(() => {
       file.newFile();
       setMode("edit");
+      setJournalOpen(false);
     });
   }, [guard, file.newFile]);
 
@@ -150,19 +207,31 @@ function App() {
   }, [handleOpenFolderPath, handleOpenPath]);
 
   const handleHome = useCallback(() => {
-    if (!isFileOpen) return;
+    if (!isFileOpen) {
+      if (journalEntry) setJournalEntry(null);
+      else if (journalTask) setJournalTask(null);
+      else setJournalOpen(false);
+      return;
+    }
     const path = file.filePath;
     guard(() => {
       closedPathRef.current = path;
       file.closeFile();
       setMode("view");
     });
-  }, [isFileOpen, file, guard]);
+  }, [isFileOpen, file, guard, journalTask, journalEntry]);
 
   const handleForward = useCallback(() => {
     const path = closedPathRef.current;
     if (!isFileOpen && path) handleOpenPath(path);
   }, [isFileOpen, handleOpenPath]);
+
+  const handleOpenTask = useCallback((project: WorklogProject, task: WorklogTask) => {
+    handleSelectJournalProject(project.slug);
+    setJournalTask(task.id);
+    setJournalEntry(null);
+    setJournalOpen(true);
+  }, [handleSelectJournalProject]);
 
   const handleSave = useCallback(async () => {
     try {
@@ -324,6 +393,7 @@ function App() {
         fileName={file.fileName}
         hasChanges={file.hasChanges || file.isDraft}
         isFileOpen={isFileOpen}
+        canGoHome={isFileOpen || journalOpen}
         onOpen={handleOpen}
         onSave={handleSave}
         onNew={handleNew}
@@ -339,30 +409,63 @@ function App() {
       />
 
       <div className="relative flex flex-1 overflow-hidden">
-        {folderPath && (
-          <FolderSidebar
-            files={folderFiles}
-            truncated={folderTruncated}
-            folderPath={folderPath}
-            currentFilePath={file.filePath}
-            onFileClick={handleOpenPath}
-            onClose={handleCloseFolder}
-            onRefresh={refreshFolder}
-            onRenamed={handleRenamed}
-            onDeleted={handleDeleted}
-          />
+        {!showJournal && (
+          <PanelReveal show={!!folderPath}>
+            {folderPath && (
+              <FolderSidebar
+                files={folderFiles}
+                truncated={folderTruncated}
+                folderPath={folderPath}
+                currentFilePath={file.filePath}
+                onFileClick={handleOpenPath}
+                onClose={handleCloseFolder}
+                onRefresh={refreshFolder}
+                onRenamed={handleRenamed}
+                onDeleted={handleDeleted}
+              />
+            )}
+          </PanelReveal>
         )}
 
-        {showToc && mode === "view" && isFileOpen && (
-          <TableOfContents
-            content={file.content}
-            sheetRef={sheetRef}
-            onClose={() => setShowToc(false)}
-          />
+        {mode === "view" && isFileOpen && (
+          <PanelReveal show={showToc}>
+            <TableOfContents
+              content={file.content}
+              sheetRef={sheetRef}
+              onClose={() => setShowToc(false)}
+            />
+          </PanelReveal>
         )}
 
-        {!isFileOpen ? (
+        {showJournal ? (
+          <Journal
+            projects={worklog?.projects ?? null}
+            error={worklogError}
+            selected={journalProject}
+            onSelect={(slug) => {
+              handleSelectJournalProject(slug);
+              setJournalTask(null);
+              setJournalEntry(null);
+            }}
+            taskId={journalTask}
+            onBack={() => {
+              setJournalTask(null);
+              setJournalEntry(null);
+            }}
+            entryFile={journalEntry}
+            onEntry={setJournalEntry}
+            onOpenTask={handleOpenTask}
+            onClose={() => {
+              setJournalTask(null);
+              setJournalEntry(null);
+              setJournalOpen(false);
+            }}
+          />
+        ) : !isFileOpen ? (
           <WelcomeScreen
+            activeTasks={activeTasks}
+            onOpenJournal={handleOpenJournal}
+            onOpenTask={handleOpenTask}
             recentFiles={recentFiles}
             onOpen={handleOpen}
             onOpenFolder={handleOpenFolder}
@@ -392,6 +495,24 @@ function App() {
 
         <DragDropOverlay state={dragState} />
       </div>
+
+      {showJournal && worklog && (
+        <div className="flex h-8 shrink-0 select-none items-center justify-between gap-4 whitespace-nowrap px-5 pb-2
+          text-xs font-medium tabular-nums text-dim" title={worklog.root}>
+          <span className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+            {[...worklog.root.split(/[\\/]/).slice(-2), ...(journalTask ? [worklog.projects.find((p) => p.slug === journalProject)?.name ?? "", journalTask] : [])].map((part, i, all) => (
+              <span key={part} className="flex items-center gap-0.5">
+                {i > 0 && <Icon name="chevron" className="h-3 w-3 shrink-0 opacity-60" />}
+                <span className={i === all.length - 1 ? "px-1.5 text-fg" : "px-1.5"}>{part}</span>
+              </span>
+            ))}
+          </span>
+          <span>
+            {worklog.projects.length} {plural(worklog.projects.length, ["проект", "проекта", "проектов"])} ·{" "}
+            {taskCount} {plural(taskCount, ["задача", "задачи", "задач"])}
+          </span>
+        </div>
+      )}
 
       {isFileOpen && (
         <StatusBar
