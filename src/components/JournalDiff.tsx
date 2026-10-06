@@ -59,11 +59,13 @@ function Row({ line, html, flash }: { line: DiffLine; html: string; flash: boole
   );
 }
 
-function FileCard({ file, repo, hash, target, cardRef }: {
+function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
   file: DiffFile;
   repo: string;
   hash: string;
   target: DiffTarget | null;
+  folded: boolean;
+  onToggle: () => void;
   cardRef: (el: HTMLElement | null) => void;
 }) {
   const [shown, setShown] = useState<Record<number, { lines: DiffLine[]; html: string[] }>>({});
@@ -98,16 +100,25 @@ function FileCard({ file, repo, hash, target, cardRef }: {
   return (
     <section ref={cardRef} className="df-card flex min-w-0 scroll-mt-2 flex-col rounded-[20px]">
       <div className="df-stick sticky top-0 z-[2]">
-        <div className="df-fh flex min-h-11 min-w-0 items-center gap-3 rounded-t-[19px] px-4">
-          <span className="flex min-w-0 flex-1 font-mono text-[13px]" title={file.path}>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!folded}
+          title={file.path}
+          className={`df-fh flex min-h-11 w-full min-w-0 items-center gap-3 px-4 text-left
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent
+            ${folded ? "rounded-[19px]" : "rounded-t-[19px]"}`}
+        >
+          <Icon name="chevron" className={`df-muted -ml-1 h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-trail ${folded ? "" : "rotate-90"}`} />
+          <span className="flex min-w-0 flex-1 font-mono text-[13px]">
             <span className="df-muted min-w-0 truncate">{dir}</span>
             <b className="shrink-0 font-bold">{name}</b>
           </span>
           <span className="df-muted shrink-0 whitespace-nowrap font-mono text-xs">{count(file)}</span>
           <Bar file={file} />
-        </div>
+        </button>
       </div>
-      {file.binary || file.hunks.length === 0 ? (
+      {folded ? null : file.binary || file.hunks.length === 0 ? (
         <div className="df-muted px-4 py-3 text-[13px]">
           {file.binary
             ? "Двоичный файл — изменения не показываются"
@@ -247,6 +258,26 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
   const [files, setFiles] = useState<DiffFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const cards = useRef<(HTMLElement | null)[]>([]);
+  const [folded, setFolded] = useState<Set<string>>(() => new Set());
+  const [foldTarget, setFoldTarget] = useState(target);
+  if (foldTarget !== target) {
+    setFoldTarget(target);
+    setFolded(new Set());
+  }
+  const allFolded = !!files && files.length > 0 && files.every((f) => folded.has(f.path));
+
+  const toggle = (path: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(path)) next.add(path);
+      return next;
+    });
+
+  const pick = (index: number) => {
+    const path = files?.[index]?.path;
+    if (path && folded.has(path)) toggle(path);
+    requestAnimationFrame(() => cards.current[index]?.scrollIntoView({ block: "start" }));
+  };
 
   useEffect(() => {
     let alive = true;
@@ -286,7 +317,19 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
           </span>
           <span className="min-w-0 flex-1 truncate text-sm font-bold">{entry.title || entry.message}</span>
           {total && <span className="shrink-0 whitespace-nowrap font-mono text-xs text-dim">{count(total)}</span>}
-          {files && <FilesMenu files={files} onPick={(i) => cards.current[i]?.scrollIntoView({ block: "start" })} />}
+          {files && files.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setFolded(allFolded ? new Set() : new Set(files.map((f) => f.path)))}
+              className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-raised pl-2.5 pr-3 text-[12.5px] font-medium
+                transition duration-200 ease-trail hover:bg-hover-strong active:scale-[.96]
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Icon name={allFolded ? "unfoldAll" : "foldAll"} className="h-3.5 w-3.5 text-dim" />
+              {allFolded ? "Развернуть все" : "Свернуть все"}
+            </button>
+          )}
+          {files && <FilesMenu files={files} onPick={pick} />}
         </div>
         <div className="welcome-sheet min-h-0 flex-1 overflow-y-auto pb-5">
           {error ? (
@@ -302,6 +345,8 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
                   repo={project.repo}
                   hash={hash}
                   target={i === targetIndex && target.from !== undefined ? target : null}
+                  folded={folded.has(file.path)}
+                  onToggle={() => toggle(file.path)}
                   cardRef={(el) => {
                     cards.current[i] = el;
                   }}

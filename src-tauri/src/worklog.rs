@@ -128,6 +128,27 @@ fn git_result(out: std::process::Output) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn git_mainline(repo: String) -> Result<String, String> {
+    if !Path::new(&repo).is_dir() {
+        return Err(format!("Папка репозитория не найдена: {repo}"));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut last = Err("Основная ветка не найдена".to_string());
+        for branch in ["origin/HEAD", "origin/main", "origin/master", "main", "master"] {
+            let out = git(&repo, &["log", "--first-parent", "--no-color", "--format=%H%x09%aI%x09%s", branch])
+                .map_err(|_| "Git не найден — установите Git for Windows".to_string())?;
+            last = git_result(out);
+            if last.is_ok() {
+                break;
+            }
+        }
+        last
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub async fn git_file(repo: String, hash: String, path: String) -> Result<String, String> {
     if !hash.chars().all(|c| c.is_ascii_hexdigit()) || hash.len() < 4 {
         return Err("Некорректный hash коммита".into());

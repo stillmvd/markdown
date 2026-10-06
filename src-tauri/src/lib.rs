@@ -295,7 +295,8 @@ pub fn run() {
             updates::update_prepare,
             worklog::worklog_read,
             worklog::git_show,
-            worklog::git_file
+            worklog::git_file,
+            worklog::git_mainline
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
