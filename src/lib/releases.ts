@@ -31,6 +31,8 @@ function add(group: ReleaseGroup, task: WorklogTask, fix: boolean) {
 
 export function groupByRelease(project: WorklogProject, raw: string): ReleaseGroup[] | null {
   const byId = new Map(project.tasks.map((task) => [task.id, task]));
+  const byBranch = new Map(project.tasks.flatMap((task) => task.branches.map((branch) => [branch, task] as const)));
+  const find = (name: string) => byId.get(name.match(KEY)?.[0] ?? name) ?? byBranch.get(name);
   const merged = new Set<WorklogTask>();
   const unreleased: ReleaseGroup = { id: "unreleased", kind: "unreleased", title: "Не выпущено", meta: "влито, ждёт [publish]", items: [], extra: [] };
   const groups: ReleaseGroup[] = [];
@@ -45,20 +47,20 @@ export function groupByRelease(project: WorklogProject, raw: string): ReleaseGro
     }
     const branch = subject.match(MERGE)?.[1];
     if (!branch) {
-      const direct = byId.get(subject.match(KEY)?.[0] ?? "");
+      const token = subject.trim().split(/[:\s]/)[0];
+      const direct = find(subject.match(KEY)?.[0] ?? token);
       if (direct) {
-        const token = subject.split(/[:\s]/)[0];
         add(current, direct, token !== direct.id && /fix/i.test(token));
         merged.add(direct);
       }
       continue;
     }
-    const task = byId.get(branch.match(KEY)?.[0] ?? "");
+    const task = find(branch);
     if (task) {
       add(current, task, branch !== task.id && /fix/i.test(branch));
       merged.add(task);
       for (const other of task.branches) {
-        const inner = byId.get(other.match(KEY)?.[0] ?? "");
+        const inner = find(other);
         if (inner && inner !== task && !merged.has(inner)) {
           add(current, inner, false);
           merged.add(inner);
