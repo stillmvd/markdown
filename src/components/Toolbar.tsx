@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { UpdateBadge } from "@stillmvd/tauri-ship";
 import type { ViewMode, Theme } from "../types";
 import Icon, { type IconName } from "./Icon";
 
@@ -222,6 +223,11 @@ export default function Toolbar({
       )}
 
       <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+      {!hasChanges && (
+        <span className="flex empty:hidden">
+          <UpdateBadge lang="ru" />
+        </span>
+      )}
       <WindowControls />
     </div>
   );

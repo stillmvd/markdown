@@ -52,6 +52,18 @@
     --scroll-thumb: var(--line);
     --scroll-thumb-hover: color-mix(in oklab, var(--line) 65%, var(--fg));
 
+    --ship-bg: var(--cosmic);
+    --ship-fg: var(--fg);
+    --ship-muted: var(--dim);
+    --ship-accent: var(--accent);
+    --ship-accent-hover: var(--accent-hover);
+    --ship-accent-fg: var(--accent-ink);
+    --ship-accent-soft: var(--accent-soft);
+    --ship-warn: var(--accent);
+    --ship-hover: var(--hover-strong);
+    --ship-border: var(--line);
+    --ship-radius: 20px;
+
     color-scheme: light;
   }
 

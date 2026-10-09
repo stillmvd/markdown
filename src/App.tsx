@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { load } from "@tauri-apps/plugin-store";
+import { installNow, UpdateToast } from "@stillmvd/tauri-ship";
 import type { ViewMode, FileEntry, FolderListing, RecentEntry } from "./types";
 import { useFile } from "./hooks/useFile";
 import { useTheme } from "./hooks/useTheme";
@@ -50,7 +51,6 @@ function App() {
   const [folderFiles, setFolderFiles] = useState<FileEntry[]>([]);
   const [folderTruncated, setFolderTruncated] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [journalOpen, setJournalOpen] = useState(false);
   const [journalProject, setJournalProject] = useState<string | null>(readJournalProject);
   const [journalTask, setJournalTask] = useState<string | null>(null);
@@ -348,10 +348,6 @@ function App() {
     return () => window.removeEventListener("mouseup", handler);
   }, [handleHome, handleForward]);
 
-  useEffect(() => {
-    invoke<string | null>("update_prepare").then(setUpdateVersion, () => {});
-  }, []);
-
   const { openFile } = file;
   useEffect(() => {
     (async () => {
@@ -539,10 +535,14 @@ function App() {
         <StatusBar
           content={file.content}
           filePath={file.filePath}
-          updateVersion={updateVersion}
+          onInstallUpdate={() => guard(() => {
+            installNow().catch(() => {});
+          })}
           onOpenFolder={handleOpenFolderPath}
         />
       )}
+
+      {!file.hasChanges && !file.isDraft && <UpdateToast lang="ru" />}
 
       {pendingAction && (
         <UnsavedDialog

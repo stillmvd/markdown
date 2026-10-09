@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { checkNow, useShip } from "@stillmvd/tauri-ship";
 import { calculateStats } from "../lib/statistics";
 import { plural } from "../lib/plural";
 import Icon from "./Icon";
@@ -6,7 +7,7 @@ import Icon from "./Icon";
 interface StatusBarProps {
   content: string;
   filePath: string | null;
-  updateVersion: string | null;
+  onInstallUpdate: () => void;
   onOpenFolder: (path: string) => void;
 }
 
@@ -30,7 +31,64 @@ function buildCrumbs(filePath: string | null): Crumb[] {
   });
 }
 
-export default function StatusBar({ content, filePath, updateVersion, onOpenFolder }: StatusBarProps) {
+function checkedAgo(ms: number) {
+  const minutes = Math.floor((Date.now() - ms) / 60_000);
+  if (minutes < 1) return "проверено только что";
+  if (minutes < 60) return `проверено ${minutes} мин назад`;
+  return `проверено в ${new Date(ms).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+const chip = `inline-flex h-6 items-center rounded-full px-2.5 transition duration-200 ease-trail active:scale-[.96]
+  disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`;
+
+function UpdateStatus({ onInstall }: { onInstall: () => void }) {
+  const { status } = useShip();
+  const [checking, setChecking] = useState(false);
+  if (!status) return null;
+  const { phase, available, error } = status;
+  const ready = phase === "ready" || phase === "installing";
+  const percent = status.total ? ` ${Math.round((status.downloaded / status.total) * 100)}%` : "…";
+  const label = checking || phase === "checking"
+    ? "проверка…"
+    : phase === "downloading" && available
+      ? `загрузка ${available.version}${percent}`
+      : error ?? (status.lastCheck ? checkedAgo(status.lastCheck) : null);
+
+  const check = () => {
+    setChecking(true);
+    checkNow().catch(() => {}).finally(() => setChecking(false));
+  };
+
+  return (
+    <div className="mr-2 flex min-w-0 items-center gap-1">
+      <span className={`max-w-[20rem] truncate px-1 ${error && label === error ? "text-fg" : ""}`} title={error ?? undefined}>
+        v{status.current}{label && ` · ${label}`}
+      </span>
+      {ready && available ? (
+        <button
+          type="button"
+          onClick={onInstall}
+          disabled={phase === "installing"}
+          className={`${chip} bg-accent text-accent-ink hover:bg-accent-hover`}
+        >
+          {phase === "installing" ? "Установка…" : `Перезапустить для обновления до ${available.version}`}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={check}
+          disabled={checking || phase === "checking" || phase === "downloading"}
+          className={`${chip} bg-raised hover:bg-hover-strong hover:text-fg`}
+          title="Проверить обновления"
+        >
+          Проверить
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function StatusBar({ content, filePath, onInstallUpdate, onOpenFolder }: StatusBarProps) {
   const stats = useMemo(() => calculateStats(content), [content]);
   const fullPath = useMemo(() => buildCrumbs(filePath), [filePath]);
   const [pinned, setPinned] = useState({ filePath, path: "" });
@@ -98,7 +156,7 @@ export default function StatusBar({ content, filePath, updateVersion, onOpenFold
         ))}
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {updateVersion && <span className="mr-2">Версия {updateVersion} установится при закрытии</span>}
+        <UpdateStatus onInstall={onInstallUpdate} />
         {counters.map((counter) => (
           <span key={counter} className="inline-flex h-6 items-center rounded-full bg-raised px-2.5">
             {counter}

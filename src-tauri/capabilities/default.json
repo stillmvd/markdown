@@ -8,6 +8,7 @@
     "opener:default",
     "dialog:default",
     "store:default",
+    "ship:default",
     "core:event:default",
     "core:event:allow-emit",
     "core:event:allow-listen",

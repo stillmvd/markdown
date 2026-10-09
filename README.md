@@ -9,7 +9,6 @@
 
 Нативное десктопное приложение для просмотра и редактирования Markdown файлов на Windows. Построено на Tauri 2 + React 19.
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -150,21 +149,21 @@ src-tauri/
 
 ### Требования
 
-- [Node.js](https://nodejs.org/) >= 18
+- [Node.js](https://nodejs.org/) >= 18 и [pnpm](https://pnpm.io/)
 - [Rust](https://rustup.rs/) >= 1.77
 - [Tauri CLI](https://tauri.app/start/prerequisites/)
 
 ### Разработка
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm tauri dev
 ```
 
-### Сборка
+### Релиз и обновления
 
 ```bash
-npm run tauri build
+pnpm release
 ```
 
-Результат: `src-tauri/target/release/markdown-viewer.exe` + NSIS-инсталлятор в `src-tauri/target/release/bundle/nsis/`.
+Релиз собирается локально по стандарту [tauri-ship](https://github.com/stillmvd/tauri-ship): проверки, версия по conventional-коммитам, подписанная сборка, тег и публикация в GitHub Releases в фоне. Приложение само проверяет обновления, скачивает их в фоне и предлагает перезапуститься.

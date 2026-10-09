@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ToastProvider } from "./components/Toast";
+import "@stillmvd/tauri-ship/ship.css";
 import "./App.css";
 
 addEventListener("keydown", (e) => {

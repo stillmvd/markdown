@@ -1,5 +1,4 @@
 mod splash;
-mod updates;
 mod worklog;
 
 use parking_lot::Mutex;
@@ -266,6 +265,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_ship::init(|_app| {}))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(path) = args.get(1) {
                 if is_text_file(path) {
@@ -280,7 +280,6 @@ pub fn run() {
         }))
         .manage(current_file.clone())
         .manage(splash)
-        .manage(updates::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             read_file,
             write_file,
@@ -292,7 +291,6 @@ pub fn run() {
             duplicate_path,
             set_window_theme,
             app_ready,
-            updates::update_prepare,
             worklog::worklog_read,
             worklog::git_show,
             worklog::git_file,
@@ -304,7 +302,7 @@ pub fn run() {
                     .store("settings.json")
                     .ok()
                     .and_then(|store| store.get("theme"))
-                    .map_or(true, |theme| theme != "light");
+                    .is_none_or(|theme| theme != "light");
                 paint_window(&window, dark);
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_secs(8));
@@ -318,11 +316,6 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(context)
-        .expect("error while building tauri application")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                updates::install_pending(app);
-            }
-        });
+        .run(context)
+        .expect("error while running tauri application");
 }

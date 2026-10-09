@@ -4,9 +4,9 @@
   "version": "../package.json",
   "identifier": "com.stillmvd.markdown",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1421",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -44,7 +44,7 @@
         "https://github.com/stillmvd/markdown/releases/latest/download/latest.json"
       ],
       "windows": {
-        "installMode": "quiet"
+        "installMode": "passive"
       }
     }
   },
@@ -65,7 +65,8 @@
         ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
-        "installerHooks": "./windows/hooks.nsh"
+        "installerHooks": "./windows/hooks.nsh",
+        "template": "../node_modules/@stillmvd/tauri-ship/nsis/installer.nsi"
       }
     },
     "icon": [
