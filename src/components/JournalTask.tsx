@@ -159,15 +159,27 @@ function Feed({ entries, entryFile, onOpenEntry }: { entries: WorklogEntry[]; en
   );
 }
 
-export default function JournalTask({ project, task, entryFile, onOpenEntry }: {
+export default function JournalTask({ project, task, entryFile, onOpenEntry, onBack }: {
   project: WorklogProject;
   task: WorklogTask;
   entryFile: string | null;
   onOpenEntry: (file: string) => void;
+  onBack: () => void;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-8 pb-8 pt-8">
       <div className="flex min-w-0 flex-col gap-3.5">
+        <button
+          type="button"
+          onClick={onBack}
+          title="К списку задач (Ctrl+W)"
+          className="inline-flex h-8 items-center gap-1.5 self-start rounded-full bg-raised pl-2.5 pr-3.5 text-[13px] font-medium
+            transition duration-200 ease-trail hover:bg-hover-strong active:scale-[.96]
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 -scale-x-100 text-dim" />
+          Задачи {project.name}
+        </button>
         <div className="flex flex-wrap items-center gap-2">
           <TaskKey id={task.id} />
           <StatusChip task={task} />

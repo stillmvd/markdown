@@ -5,7 +5,7 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { FileEntry } from "../types";
 import Icon from "./Icon";
 import PopupMenu, { type MenuAction } from "./PopupMenu";
-import SidePanel, { SidePanelEmpty } from "./SidePanel";
+import { SidePanelEmpty } from "./SidePanel";
 import { useCopy, useToast } from "./Toast";
 
 interface FolderSidebarProps {
@@ -245,26 +245,26 @@ export default function FolderSidebar({
   };
 
   return (
-    <SidePanel
-      icon="folder"
-      title={getFolderName(folderPath)}
-      closeLabel="Закрыть папку"
-      storageKey="folderPanelWidth"
-      onClose={onClose}
-      actions={hasOpenFolder ? (
-        <button
-          type="button"
-          onClick={collapseAll}
-          title="Свернуть все папки"
-          aria-label="Свернуть все папки"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-dim
-            transition duration-200 ease-trail hover:bg-hover-strong hover:text-fg active:scale-[.96]
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <Icon name="collapse" />
+    <section className="flex min-h-0 flex-1 flex-col gap-0.5 rounded-[20px] bg-cosmic p-2" aria-label={`Папка ${getFolderName(folderPath)}`}>
+      <div className="flex h-7 shrink-0 items-center gap-0.5 pl-4 pr-0">
+        <span className="min-w-0 flex-1 truncate text-xs font-bold text-dim" title={folderPath}>
+          Папка · {getFolderName(folderPath)}
+        </span>
+        {hasOpenFolder && (
+          <button
+            type="button"
+            onClick={collapseAll}
+            title="Свернуть все папки"
+            aria-label="Свернуть все папки"
+            className="nav-mini"
+          >
+            <Icon name="collapse" className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button type="button" onClick={onClose} title="Закрыть папку" aria-label="Закрыть папку" className="nav-mini">
+          <Icon name="close" className="h-3.5 w-3.5" />
         </button>
-      ) : null}
-    >
+      </div>
       {truncated ? (
         <span
           title="Папка слишком большая — дерево показано частично. Откройте папку поменьше."
@@ -276,7 +276,7 @@ export default function FolderSidebar({
       {files.length === 0 ? (
         <SidePanelEmpty icon="folder" title="Текстовых файлов нет" text="Здесь появятся .md и .txt из этой папки и вложенных" />
       ) : (
-        <div className="side-list gap-1.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {files.map((entry) => (
             <TreeNode key={entry.path} entry={entry} ctx={ctx} />
           ))}
@@ -290,6 +290,6 @@ export default function FolderSidebar({
           onClose={() => setMenu(null)}
         />
       )}
-    </SidePanel>
+    </section>
   );
 }

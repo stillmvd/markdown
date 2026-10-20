@@ -10,7 +10,9 @@ import { useFile } from "./hooks/useFile";
 import { useTheme } from "./hooks/useTheme";
 import { useRecentFiles } from "./hooks/useRecentFiles";
 import { useKeyboard } from "./hooks/useKeyboard";
-import Toolbar from "./components/Toolbar";
+import Titlebar from "./components/Titlebar";
+import NavMenu from "./components/NavMenu";
+import DocBar from "./components/DocBar";
 import Editor from "./components/Editor";
 import Viewer from "./components/Viewer";
 import StatusBar from "./components/StatusBar";
@@ -232,10 +234,15 @@ function App() {
     else closeJournal();
   }, [isFileOpen, handleHome, closeJournal]);
 
-  const handleToolbarJournal = useCallback(() => {
+  const openJournalAt = useCallback((slug: string | null) => {
+    const show = () => {
+      if (slug) handleSelectJournalProject(slug);
+      setJournalTask(null);
+      setJournalEntry(null);
+      handleOpenJournal();
+    };
     if (!isFileOpen) {
-      if (journalOpen) closeJournal();
-      else handleOpenJournal();
+      show();
       return;
     }
     const path = file.filePath;
@@ -243,9 +250,9 @@ function App() {
       closedPathRef.current = path;
       file.closeFile();
       setMode("view");
-      handleOpenJournal();
+      show();
     });
-  }, [isFileOpen, journalOpen, file, guard, closeJournal, handleOpenJournal]);
+  }, [isFileOpen, file, guard, handleOpenJournal, handleSelectJournalProject]);
 
   const handleForward = useCallback(() => {
     const path = closedPathRef.current;
@@ -409,68 +416,41 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-ground text-fg">
-      <Toolbar
-        mode={mode}
-        theme={theme}
-        fileName={file.fileName}
-        hasChanges={file.hasChanges || file.isDraft}
-        isFileOpen={isFileOpen}
-        canGoHome={isFileOpen || journalOpen}
-        onOpen={handleOpen}
-        onSave={handleSave}
-        onNew={handleNew}
-        onHome={handleGoHome}
-        onOpenFolder={handleOpenFolder}
-        onToggleMode={handleToggleMode}
-        onToggleTheme={toggleTheme}
-        onToggleToc={() => setShowToc((prev) => !prev)}
-        showToc={showToc}
-        onToggleSearch={handleToggleSearch}
-        showSearch={showSearch}
-        onExportPdf={handleExportPdf}
-        journalOpen={showJournal}
-        onOpenJournal={handleToolbarJournal}
-      />
+      <Titlebar hasChanges={file.hasChanges || file.isDraft} />
 
       <div className="relative flex flex-1 overflow-hidden">
-        {!showJournal && (
-          <PanelReveal show={!!folderPath}>
-            {folderPath && (
-              <FolderSidebar
-                files={folderFiles}
-                truncated={folderTruncated}
-                folderPath={folderPath}
-                currentFilePath={file.filePath}
-                onFileClick={handleOpenPath}
-                onClose={handleCloseFolder}
-                onRefresh={refreshFolder}
-                onRenamed={handleRenamed}
-                onDeleted={handleDeleted}
-              />
-            )}
-          </PanelReveal>
-        )}
-
-        {mode === "view" && isFileOpen && (
-          <PanelReveal show={showToc}>
-            <TableOfContents
-              content={file.content}
-              sheetRef={sheetRef}
-              onClose={() => setShowToc(false)}
+        <NavMenu
+          screen={showJournal ? "journal" : isFileOpen ? "file" : "home"}
+          projects={worklog?.projects ?? []}
+          journalProject={journalProject}
+          theme={theme}
+          folder={folderPath ? (
+            <FolderSidebar
+              files={folderFiles}
+              truncated={folderTruncated}
+              folderPath={folderPath}
+              currentFilePath={file.filePath}
+              onFileClick={handleOpenPath}
+              onClose={handleCloseFolder}
+              onRefresh={refreshFolder}
+              onRenamed={handleRenamed}
+              onDeleted={handleDeleted}
             />
-          </PanelReveal>
-        )}
+          ) : null}
+          onHome={handleGoHome}
+          onJournal={() => openJournalAt(null)}
+          onProject={openJournalAt}
+          onNew={handleNew}
+          onOpen={handleOpen}
+          onOpenFolder={handleOpenFolder}
+          onToggleTheme={toggleTheme}
+        />
 
         {showJournal ? (
           <Journal
             projects={worklog?.projects ?? null}
             error={worklogError}
             selected={journalProject}
-            onSelect={(slug) => {
-              handleSelectJournalProject(slug);
-              setJournalTask(null);
-              setJournalEntry(null);
-            }}
             taskId={journalTask}
             onBack={() => {
               setJournalTask(null);
@@ -479,7 +459,6 @@ function App() {
             entryFile={journalEntry}
             onEntry={setJournalEntry}
             onOpenTask={handleOpenTask}
-            onClose={closeJournal}
           />
         ) : !isFileOpen ? (
           <WelcomeScreen
@@ -490,24 +469,50 @@ function App() {
             onRemoveRecent={removeRecent}
             onClearRecent={clearRecent}
           />
-        ) : mode === "view" ? (
-          <Viewer
-            content={file.content}
-            filePath={file.filePath}
-            folderPath={folderPath}
-            onOpenFile={handleOpenPath}
-            sheetRef={sheetRef}
-            plain={isPlain}
-            showSearch={showSearch}
-            onCloseSearch={closeSearch}
-          />
         ) : (
-          <Editor
-            content={file.content}
-            onChange={file.setContent}
-            theme={theme}
-            plain={isPlain}
-          />
+          <div className="doc-area relative flex min-w-0 flex-1">
+            {mode === "view" ? (
+              <Viewer
+                content={file.content}
+                filePath={file.filePath}
+                folderPath={folderPath}
+                onOpenFile={handleOpenPath}
+                sheetRef={sheetRef}
+                plain={isPlain}
+                showSearch={showSearch}
+                onCloseSearch={closeSearch}
+              />
+            ) : (
+              <Editor
+                content={file.content}
+                onChange={file.setContent}
+                theme={theme}
+                plain={isPlain}
+              />
+            )}
+            <DocBar
+              fileName={file.fileName ?? "Новый файл"}
+              hasChanges={file.hasChanges || file.isDraft}
+              mode={mode}
+              showSearch={showSearch}
+              showToc={showToc}
+              onSave={handleSave}
+              onToggleMode={handleToggleMode}
+              onToggleSearch={handleToggleSearch}
+              onToggleToc={() => setShowToc((prev) => !prev)}
+              onExportPdf={handleExportPdf}
+            />
+          </div>
+        )}
+
+        {mode === "view" && isFileOpen && !showJournal && (
+          <PanelReveal show={showToc}>
+            <TableOfContents
+              content={file.content}
+              sheetRef={sheetRef}
+              onClose={() => setShowToc(false)}
+            />
+          </PanelReveal>
         )}
 
         <DragDropOverlay state={dragState} />

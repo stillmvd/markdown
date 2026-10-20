@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { usePanelWidth } from "../hooks/usePanelWidth";
+import { usePanelWidth, type PanelSide } from "../hooks/usePanelWidth";
 import Icon, { type IconName } from "./Icon";
 
 interface SidePanelProps {
@@ -7,6 +7,7 @@ interface SidePanelProps {
   title: string;
   closeLabel: string;
   storageKey: string;
+  side?: PanelSide;
   actions?: ReactNode;
   onClose: () => void;
   children: ReactNode;
@@ -24,11 +25,52 @@ export function SidePanelEmpty({ icon, title, text }: { icon: IconName; title: s
   );
 }
 
-export default function SidePanel({ icon, title, closeLabel, storageKey, actions, onClose, children }: SidePanelProps) {
-  const { width, resizing, onMouseDown, onDoubleClick } = usePanelWidth(storageKey);
+export function PanelResizeHandle({ side, resizing, onMouseDown, onDoubleClick }: {
+  side: PanelSide;
+  resizing: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onDoubleClick: () => void;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      data-active={resizing}
+      title="Потяните, чтобы изменить ширину. Двойной клик — по умолчанию"
+      onMouseDown={onMouseDown}
+      onDoubleClick={onDoubleClick}
+      className={`group absolute inset-y-0 z-20 flex w-3 cursor-col-resize items-center justify-center
+        ${side === "left" ? "right-0 translate-x-[calc(50%+4px)]" : "left-0 -translate-x-[calc(50%+4px)]"}`}
+    >
+      <span
+        className="absolute left-1/2 top-1/2 h-2/5 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent opacity-0
+          transition-opacity duration-200 ease-trail group-hover:opacity-100 group-data-[active=true]:opacity-100"
+      />
+      <span
+        className="relative grid h-7 w-[22px] scale-75 place-items-center rounded-full bg-accent text-accent-ink opacity-0
+          transition duration-200 ease-trail group-hover:scale-100 group-hover:opacity-100
+          group-data-[active=true]:scale-100 group-data-[active=true]:opacity-100"
+      >
+        <span className="flex items-center">
+          <Icon
+            name="chevron"
+            className="h-[11px] w-[11px] rotate-180 transition-transform duration-200 ease-trail group-hover:-translate-x-[1px]"
+          />
+          <Icon
+            name="chevron"
+            className="-ml-[2px] h-[11px] w-[11px] transition-transform duration-200 ease-trail group-hover:translate-x-[1px]"
+          />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+export default function SidePanel({ icon, title, closeLabel, storageKey, side = "left", actions, onClose, children }: SidePanelProps) {
+  const { width, resizing, onMouseDown, onDoubleClick } = usePanelWidth(storageKey, side);
 
   return (
-    <div style={{ width }} className="relative mb-2 ml-2 flex shrink-0">
+    <div style={{ width }} className={`relative mb-2 flex shrink-0 ${side === "left" ? "ml-2" : "mr-2"}`}>
       <aside className="flex w-full flex-col overflow-hidden rounded-[28px] bg-cosmic">
         <div className="flex min-h-12 shrink-0 items-center gap-2 pb-1 pl-3 pr-2 pt-2">
           <span
@@ -53,36 +95,7 @@ export default function SidePanel({ icon, title, closeLabel, storageKey, actions
         </div>
         {children}
       </aside>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        data-active={resizing}
-        title="Потяните, чтобы изменить ширину. Двойной клик — по умолчанию"
-        onMouseDown={onMouseDown}
-        onDoubleClick={onDoubleClick}
-        className="group absolute inset-y-0 right-0 z-20 flex w-3 translate-x-[calc(50%+4px)] cursor-col-resize items-center justify-center"
-      >
-        <span
-          className="absolute left-1/2 top-1/2 h-2/5 w-[2px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent opacity-0
-            transition-opacity duration-200 ease-trail group-hover:opacity-100 group-data-[active=true]:opacity-100"
-        />
-        <span
-          className="relative grid h-7 w-[22px] scale-75 place-items-center rounded-full bg-accent text-accent-ink opacity-0
-            transition duration-200 ease-trail group-hover:scale-100 group-hover:opacity-100
-            group-data-[active=true]:scale-100 group-data-[active=true]:opacity-100"
-        >
-          <span className="flex items-center">
-            <Icon
-              name="chevron"
-              className="h-[11px] w-[11px] rotate-180 transition-transform duration-200 ease-trail group-hover:-translate-x-[1px]"
-            />
-            <Icon
-              name="chevron"
-              className="-ml-[2px] h-[11px] w-[11px] transition-transform duration-200 ease-trail group-hover:translate-x-[1px]"
-            />
-          </span>
-        </span>
-      </div>
+      <PanelResizeHandle side={side} resizing={resizing} onMouseDown={onMouseDown} onDoubleClick={onDoubleClick} />
     </div>
   );
 }

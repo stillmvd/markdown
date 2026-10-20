@@ -24,7 +24,7 @@ const surface = {
   },
   ".cm-content": {
     caretColor: "var(--accent)",
-    padding: "16px 0",
+    padding: "16px 0 96px",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--accent)",

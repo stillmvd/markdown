@@ -254,6 +254,10 @@ fn app_ready(window: tauri::WebviewWindow, splash: tauri::State<SplashState>) {
     }
 }
 
+const WINDOW_STATE: tauri_plugin_window_state::StateFlags = tauri_plugin_window_state::StateFlags::POSITION
+    .union(tauri_plugin_window_state::StateFlags::SIZE)
+    .union(tauri_plugin_window_state::StateFlags::MAXIMIZED);
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
@@ -265,7 +269,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_ship::init(|_app| {}))
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(WINDOW_STATE)
+                .build(),
+        )
+        .plugin(tauri_plugin_ship::init(|app| {
+            use tauri_plugin_window_state::AppHandleExt;
+            let _ = app.save_window_state(WINDOW_STATE);
+        }))
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if let Some(path) = args.get(1) {
                 if is_text_file(path) {

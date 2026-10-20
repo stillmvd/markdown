@@ -6,7 +6,7 @@ import { plural } from "../lib/plural";
 import { useMenu } from "../hooks/useMenu";
 import Icon from "./Icon";
 import { useCopy } from "./Toast";
-import SidePanel, { SidePanelEmpty } from "./SidePanel";
+import { SidePanelEmpty } from "./SidePanel";
 import JournalTask from "./JournalTask";
 import JournalEntry from "./JournalEntry";
 
@@ -14,16 +14,14 @@ interface JournalProps {
   projects: WorklogProject[] | null;
   error: string | null;
   selected: string | null;
-  onSelect: (slug: string) => void;
   taskId: string | null;
   onBack: () => void;
   entryFile: string | null;
   onEntry: (file: string | null) => void;
   onOpenTask: (project: WorklogProject, task: WorklogTask) => void;
-  onClose: () => void;
 }
 
-export function TaskKey({ id, small = false, className = "bg-raised" }: { id: string; small?: boolean; className?: string }) {
+export function TaskKey({ id, className = "bg-raised" }: { id: string; className?: string }) {
   const copy = useCopy();
   const [shot, setShot] = useState(0);
   return (
@@ -36,7 +34,7 @@ export function TaskKey({ id, small = false, className = "bg-raised" }: { id: st
         setShot((n) => n + 1);
       }}
       className={`task-key relative inline-flex shrink-0 cursor-copy items-center whitespace-nowrap rounded-full font-mono font-medium
-        ${small ? "h-5 px-[7px] text-[11px]" : "h-[22px] px-2 text-xs"} ${className}`}
+        h-[22px] px-2 text-xs ${className}`}
     >
       <span key={shot} className={`inline-flex items-center ${shot ? "task-key-shake" : ""}`}>
         {id}
@@ -331,44 +329,7 @@ function ProjectHead({ project }: { project: WorklogProject }) {
   );
 }
 
-function TaskNav({ project, task, onBack, onOpenTask }: {
-  project: WorklogProject;
-  task: WorklogTask;
-  onBack: () => void;
-  onOpenTask: JournalProps["onOpenTask"];
-}) {
-  return (
-    <>
-      <button
-        type="button"
-        onClick={onBack}
-        title="К списку задач"
-        className="side-row mx-2 shrink-0 gap-1.5 pl-2 text-[13px] font-medium text-dim hover:bg-hover hover:text-fg"
-      >
-        <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 -scale-x-100" />
-        <span className="truncate">{project.name}</span>
-      </button>
-      <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2 pt-1" aria-label={`Задачи ${project.name}`}>
-        {project.tasks.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onOpenTask(project, t)}
-            title={t.title}
-            aria-current={t === task ? "page" : undefined}
-            className={`side-row pl-1.5 pr-2.5 text-[13px] font-medium
-              ${t === task ? "bg-hover-strong shadow-press" : "hover:bg-hover"}`}
-          >
-            <TaskKey id={t.id} small className={t === task ? "bg-cosmic" : "bg-raised"} />
-            <span className={`truncate ${t.status === "done" && t !== task ? "text-dim" : ""}`}>{t.title}</span>
-          </button>
-        ))}
-      </nav>
-    </>
-  );
-}
-
-export default function Journal({ projects, error, selected, onSelect, taskId, onBack, entryFile, onEntry, onOpenTask, onClose }: JournalProps) {
+export default function Journal({ projects, error, selected, taskId, onBack, entryFile, onEntry, onOpenTask }: JournalProps) {
   const project = projects?.find((p) => p.slug === selected) ?? projects?.[0] ?? null;
   const task = project?.tasks.find((t) => t.id === taskId) ?? null;
   const entry = task?.entries.find((e) => e.file === entryFile) ?? null;
@@ -380,31 +341,6 @@ export default function Journal({ projects, error, selected, onSelect, taskId, o
 
   return (
     <>
-      <SidePanel icon="book" title="Журнал" closeLabel="Закрыть журнал" storageKey="journal-panel-width" onClose={onClose}>
-        {project && task ? (
-          <TaskNav project={project} task={task} onBack={onBack} onOpenTask={onOpenTask} />
-        ) : (
-        <nav className="flex flex-col gap-0.5 px-2 pb-2 pt-1" aria-label="Проекты">
-          {projects?.map((p) => (
-            <button
-              key={p.slug}
-              type="button"
-              onClick={() => onSelect(p.slug)}
-              aria-current={p === project ? "page" : undefined}
-              className={`side-row pl-3 pr-1.5 text-[13px] font-medium
-                ${p === project ? "bg-hover-strong shadow-press" : "hover:bg-hover"}`}
-            >
-              <span className="truncate">{p.name}</span>
-              <span className={`ml-auto inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full px-[7px] text-[11px] font-bold tabular-nums text-dim
-                ${p === project ? "bg-cosmic" : "bg-raised"}`}>
-                {p.tasks.length}
-              </span>
-            </button>
-          ))}
-        </nav>
-        )}
-      </SidePanel>
-
       <div className="wl-stack relative min-w-0 flex-1 px-2 pb-2 [overflow-x:clip]">
         <div
           key={task?.id ?? "list"}
@@ -416,7 +352,7 @@ export default function Journal({ projects, error, selected, onSelect, taskId, o
             ) : projects === null ? null : empty || !project ? (
               <SidePanelEmpty icon="book" title="Журнал пуст" text="Записи появятся после /phase:complete или коммита по задаче" />
             ) : task ? (
-              <JournalTask project={project} task={task} entryFile={entryFile} onOpenEntry={onEntry} />
+              <JournalTask project={project} task={task} entryFile={entryFile} onOpenEntry={onEntry} onBack={onBack} />
             ) : (
               <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-8 pb-8 pt-8">
                 <ProjectTasks project={project} onOpenTask={onOpenTask} />
