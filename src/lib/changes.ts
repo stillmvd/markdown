@@ -42,7 +42,7 @@ export interface NotesFile {
   doc: NotesDoc | null;
 }
 
-function parseNotes(text: string): NotesDoc | null {
+export function parseNotes(text: string): NotesDoc | null {
   try {
     const raw = JSON.parse(text.replace(/^﻿/, ""));
     if (!raw || !Array.isArray(raw.notes)) return null;
@@ -60,6 +60,9 @@ function parseNotes(text: string): NotesDoc | null {
 export const loadNotes = () =>
   invoke<{ slug: string; task: string; path: string; text: string }[]>("changes_notes").then((list) =>
     list.map((f): NotesFile => ({ slug: f.slug, task: f.task, path: f.path, doc: parseNotes(f.text) })));
+
+export const commitNotes = (slug: string, task: string, hash: string) =>
+  invoke<string | null>("worklog_commit_notes", { slug, task, hash }).then((text) => (text ? parseNotes(text) : null));
 
 const TICKET = /^([A-Z][A-Z0-9]+-\d+)/;
 

@@ -5,6 +5,8 @@ import { entryKind, gitShow } from "../lib/worklog";
 import type { DiffFile, DiffLine } from "../lib/diff";
 import { hiddenBefore, highlightHunk, highlightLine, highlightLines, languageOf, parseCommit } from "../lib/diff";
 import { DIFF_THEMES, themeVars, type DiffTheme } from "../lib/diffThemes";
+import { commitNotes, placeNotes, type PlacedNote } from "../lib/changes";
+import { useNoteTips } from "./NoteTips";
 import { plural } from "../lib/plural";
 import { useMenu } from "../hooks/useMenu";
 import Icon from "./Icon";
@@ -22,6 +24,7 @@ export interface FileDecor {
 }
 
 const MINUS = "−";
+const NO_FILES: DiffFile[] = [];
 export const count = (f: { add: number; del: number }) => `+${f.add} ${MINUS}${f.del}`;
 const splitPath = (path: string) => {
   const i = path.lastIndexOf("/");
@@ -290,8 +293,9 @@ function ThemeColumn({ current, onPick }: { current: DiffTheme; onPick: (id: str
   );
 }
 
-export default function JournalDiff({ project, entry, hash, target, theme, picker, onPick }: {
+export default function JournalDiff({ project, taskId, entry, hash, target, theme, picker, onPick }: {
   project: WorklogProject;
+  taskId: string;
   entry: WorklogEntry;
   hash: string;
   target: DiffTarget;
@@ -301,7 +305,11 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
 }) {
   const [files, setFiles] = useState<DiffFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [placed, setPlaced] = useState<PlacedNote[]>([]);
   const cards = useRef<(HTMLElement | null)[]>([]);
+  const listRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { decorFor, tip, close, openFile } = useNoteTips({ placed, files: files ?? NO_FILES, listRef, scrollRef });
   const [folded, setFolded] = useState<Set<string>>(() => new Set());
   const [foldTarget, setFoldTarget] = useState(target);
   if (foldTarget !== target) {
@@ -327,14 +335,22 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
     let alive = true;
     setFiles(null);
     setError(null);
+    setPlaced([]);
     gitShow(project.repo, hash).then(
-      (raw) => alive && setFiles(parseCommit(raw)),
+      (raw) => {
+        if (!alive) return;
+        const parsed = parseCommit(raw);
+        setFiles(parsed);
+        commitNotes(project.slug, taskId, hash)
+          .then((doc) => (doc ? placeNotes(parsed, doc.notes, (path) => invoke<string>("git_file", { repo: project.repo, hash, path })) : []))
+          .then((list) => alive && setPlaced(list), () => {});
+      },
       (e) => alive && setError(String(e)),
     );
     return () => {
       alive = false;
     };
-  }, [project.repo, hash]);
+  }, [project.repo, project.slug, taskId, hash]);
 
   const targetIndex = files && target.file ? findFile(files, target.file) : -1;
 
@@ -366,13 +382,13 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
           )}
           {files && <FilesMenu files={files} onPick={pick} />}
         </div>
-        <div className="welcome-sheet min-h-0 flex-1 overflow-y-auto pb-5">
+        <div ref={scrollRef} className="welcome-sheet min-h-0 flex-1 overflow-y-auto pb-5">
           {error ? (
             <SidePanelEmpty icon="alert" title="Дифф не открыт" text={error} />
           ) : files === null ? null : files.length === 0 ? (
             <SidePanelEmpty icon="code" title="Изменений нет" text="В этом коммите нет изменённых файлов" />
           ) : (
-            <div className="flex flex-col gap-4">
+            <div ref={listRef} className="relative flex flex-col gap-4">
               {files.map((file, i) => (
                 <FileCard
                   key={file.path}
@@ -380,12 +396,17 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
                   load={() => invoke<string>("git_file", { repo: project.repo, hash, path: file.path })}
                   target={i === targetIndex && target.from !== undefined ? target : null}
                   folded={folded.has(file.path)}
-                  onToggle={() => toggle(file.path)}
+                  onToggle={() => {
+                    if (openFile === i && !folded.has(file.path)) close();
+                    toggle(file.path);
+                  }}
                   cardRef={(el) => {
                     cards.current[i] = el;
                   }}
+                  decor={decorFor(i)}
                 />
               ))}
+              {tip}
             </div>
           )}
         </div>

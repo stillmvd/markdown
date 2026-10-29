@@ -138,6 +138,36 @@ pub fn changes_unwatch() {
     *WATCHER.lock() = None;
 }
 
+fn plain_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
+}
+
+#[tauri::command]
+pub fn worklog_commit_notes(app: tauri::AppHandle, slug: String, task: String, hash: String) -> Result<Option<String>, String> {
+    if !(7..=40).contains(&hash.len()) || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("Некорректный hash коммита".into());
+    }
+    if !plain_name(&slug) || !plain_name(&task) {
+        return Err("Некорректное имя проекта или задачи".into());
+    }
+    let dir = root(&app)?.join(slug).join(task).join("notes");
+    let exact = dir.join(format!("{hash}.json"));
+    let path = if exact.is_file() {
+        Some(exact)
+    } else {
+        std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).find(|p| {
+            p.file_stem().is_some_and(|s| s.to_string_lossy().starts_with(&hash)) && p.extension().is_some_and(|x| x == "json")
+        })
+    };
+    let text = path.and_then(|p| std::fs::read_to_string(p).ok());
+    Ok(text.filter(|t| {
+        serde_json::from_str::<serde_json::Value>(t)
+            .ok()
+            .and_then(|v| v.get("commit").and_then(|c| c.as_str()).map(|c| c.starts_with(&hash)))
+            .unwrap_or(false)
+    }))
+}
+
 #[derive(serde::Serialize)]
 pub struct NotesFile {
     slug: String,
@@ -179,6 +209,17 @@ mod tests {
         assert!(!is_relevant(repo, Path::new("C:\\Users\\a\\Proj\\src-tauri\\target\\debug\\x")));
         assert!(!is_relevant(repo, Path::new("C:\\Users\\a\\Other\\file.rs")));
         assert!(!is_relevant(repo, Path::new("C:\\Users\\a\\Proj-main\\file.rs")));
+    }
+
+    #[test]
+    fn plain_names() {
+        assert!(plain_name("breeze"));
+        assert!(plain_name("VS-734"));
+        assert!(!plain_name(""));
+        assert!(!plain_name(".."));
+        assert!(!plain_name("a/b"));
+        assert!(!plain_name("a\\b"));
+        assert!(!plain_name("C:x"));
     }
 
     #[test]

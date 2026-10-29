@@ -312,7 +312,8 @@ pub fn run() {
             changes::git_current_branch,
             changes::changes_watch,
             changes::changes_unwatch,
-            changes::changes_notes
+            changes::changes_notes,
+            changes::worklog_commit_notes
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

@@ -290,7 +290,7 @@ export default function JournalEntry({ project, task, entry, closing, onClose, o
             <Icon name="close" />
           </button>
         </div>
-        <JournalDiff project={project} entry={entry} hash={hash} target={diffSheet} theme={theme} picker={picker} onPick={choose} />
+        <JournalDiff project={project} taskId={task.id} entry={entry} hash={hash} target={diffSheet} theme={theme} picker={picker} onPick={choose} />
       </div>
     )}
     </>
