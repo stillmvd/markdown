@@ -5,7 +5,13 @@ import { usePanelWidth } from "../hooks/usePanelWidth";
 import { PanelResizeHandle } from "./SidePanel";
 import Icon, { type IconName } from "./Icon";
 
-export type NavScreen = "home" | "journal" | "file";
+export type NavScreen = "home" | "journal" | "changes" | "file";
+
+export interface NavChanges {
+  name: string;
+  branch: string;
+  files: number | null;
+}
 
 const COLLAPSED_KEY = "nav-collapsed";
 
@@ -62,11 +68,13 @@ export default function NavMenu({
   screen,
   projects,
   journalProject,
+  changes,
   theme,
   folder,
   onHome,
   onJournal,
   onProject,
+  onChanges,
   onNew,
   onOpen,
   onOpenFolder,
@@ -75,11 +83,13 @@ export default function NavMenu({
   screen: NavScreen;
   projects: WorklogProject[];
   journalProject: string | null;
+  changes: NavChanges | null;
   theme: Theme;
   folder: ReactNode;
   onHome: () => void;
   onJournal: () => void;
   onProject: (slug: string) => void;
+  onChanges: () => void;
   onNew: () => void;
   onOpen: () => void;
   onOpenFolder: () => void;
@@ -140,6 +150,31 @@ export default function NavMenu({
           </div>
         )}
       </div>
+
+      {changes && (
+        <div className="flex shrink-0 flex-col rounded-[20px] bg-cosmic p-2">
+          {rail ? (
+            <Row icon="diff" label="Изменения" current={screen === "changes"} rail onClick={onChanges} />
+          ) : (
+            <button
+              type="button"
+              onClick={onChanges}
+              aria-current={screen === "changes" ? "page" : undefined}
+              title={`Изменения · ${changes.name} · ${changes.branch}`}
+              className="nav-row nav-row-tall"
+            >
+              <Icon name="diff" className="nav-ic" />
+              <span className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate">Изменения</span>
+                <small className="truncate text-xs font-medium text-dim">
+                  {changes.name}{changes.branch ? ` · ${changes.branch}` : ""}
+                </small>
+              </span>
+              {changes.files !== null && <em className="nav-count">{changes.files}</em>}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className={`shrink-0 rounded-[20px] bg-cosmic p-2 ${rail ? "flex flex-col gap-0.5" : "grid grid-cols-3 gap-1.5"}`}>
         {actions.map(([icon, short, label, title, run]) => (

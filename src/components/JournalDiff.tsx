@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { WorklogEntry, WorklogProject } from "../lib/worklog";
 import { entryKind, gitShow } from "../lib/worklog";
@@ -16,13 +16,18 @@ export interface DiffTarget {
   to?: number;
 }
 
+export interface FileDecor {
+  rowClass?: (hunk: number, line: number) => string;
+  extra?: (hunk: number, line: number) => ReactNode;
+}
+
 const MINUS = "−";
-const count = (f: { add: number; del: number }) => `+${f.add} ${MINUS}${f.del}`;
+export const count = (f: { add: number; del: number }) => `+${f.add} ${MINUS}${f.del}`;
 const splitPath = (path: string) => {
   const i = path.lastIndexOf("/");
   return [path.slice(0, i + 1), path.slice(i + 1)];
 };
-const nFiles = (n: number) => `${n} ${plural(n, ["файл", "файла", "файлов"])}`;
+export const nFiles = (n: number) => `${n} ${plural(n, ["файл", "файла", "файлов"])}`;
 
 function findFile(files: DiffFile[], name: string) {
   const clean = name.replace(/\\/g, "/").replace(/^\.?\//, "");
@@ -45,28 +50,29 @@ function Bar({ file }: { file: DiffFile }) {
   );
 }
 
-function Row({ line, html, flash }: { line: DiffLine; html: string; flash: boolean }) {
+function Row({ line, html, flash, cls, extra }: { line: DiffLine; html: string; flash: boolean; cls?: string; extra?: ReactNode }) {
   return (
     <div
-      className={`df-r ${line.kind === "+" ? "df-ad" : line.kind === "-" ? "df-dl" : ""} ${flash ? "df-flash" : ""}`}
+      className={`df-r ${line.kind === "+" ? "df-ad" : line.kind === "-" ? "df-dl" : ""} ${flash ? "df-flash" : ""} ${cls ?? ""}`}
       data-jump={flash || undefined}
     >
       <span className="df-n">{line.old}</span>
       <span className="df-n">{line.new}</span>
       <span className="df-sg">{line.kind === "+" ? "+" : line.kind === "-" ? MINUS : ""}</span>
       <span className="df-t" dangerouslySetInnerHTML={{ __html: html }} />
+      {extra}
     </div>
   );
 }
 
-function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
+export function FileCard({ file, load, target, folded, onToggle, cardRef, decor }: {
   file: DiffFile;
-  repo: string;
-  hash: string;
+  load: () => Promise<string>;
   target: DiffTarget | null;
   folded: boolean;
   onToggle: () => void;
   cardRef: (el: HTMLElement | null) => void;
+  decor?: FileDecor;
 }) {
   const [shown, setShown] = useState<Record<number, { lines: DiffLine[]; html: string[] }>>({});
   const [failed, setFailed] = useState(false);
@@ -81,7 +87,7 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
   const expand = (index: number) => {
     const { start, count: n } = hiddenBefore(file, index);
     const offset = file.hunks[index].oldStart - file.hunks[index].newStart;
-    contentRef.current ??= invoke<string>("git_file", { repo, hash, path: file.path }).then((text) => text.split("\n"));
+    contentRef.current ??= load().then((text) => text.split("\n"));
     contentRef.current
       .then((lines) => {
         const rows = lines.slice(start - 1, start - 1 + n).map((text, i): DiffLine => ({
@@ -160,7 +166,14 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
                       </div>
                     )}
                   {hunk.lines.map((line, k) => (
-                    <Row key={k} line={line} html={hunkHtml[i][k]} flash={line.kind !== "-" && inRange(line.new)} />
+                    <Row
+                      key={k}
+                      line={line}
+                      html={hunkHtml[i][k]}
+                      flash={line.kind !== "-" && inRange(line.new)}
+                      cls={decor?.rowClass?.(i, k)}
+                      extra={decor?.extra?.(i, k)}
+                    />
                   ))}
                 </div>
               );
@@ -175,7 +188,22 @@ function FileCard({ file, repo, hash, target, folded, onToggle, cardRef }: {
   );
 }
 
-function FilesMenu({ files, onPick }: { files: DiffFile[]; onPick: (index: number) => void }) {
+export function FoldAll({ all, onClick }: { all: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-raised pl-2.5 pr-3 text-[12.5px] font-medium
+        transition duration-200 ease-trail hover:bg-hover-strong active:scale-[.96]
+        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <Icon name={all ? "unfoldAll" : "foldAll"} className="h-3.5 w-3.5 text-dim" />
+      {all ? "Развернуть все" : "Свернуть все"}
+    </button>
+  );
+}
+
+export function FilesMenu({ files, onPick }: { files: DiffFile[]; onPick: (index: number) => void }) {
   const { open, setOpen, ref, buttonRef, run } = useMenu();
   const label = nFiles(files.length);
   if (files.length < 2) {
@@ -334,16 +362,7 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
           <span className="min-w-0 flex-1 truncate text-sm font-bold">{entry.title || entry.message}</span>
           {total && <span className="shrink-0 whitespace-nowrap font-mono text-xs text-dim">{count(total)}</span>}
           {files && files.length > 1 && (
-            <button
-              type="button"
-              onClick={() => setFolded(allFolded ? new Set() : new Set(files.map((f) => f.path)))}
-              className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-raised pl-2.5 pr-3 text-[12.5px] font-medium
-                transition duration-200 ease-trail hover:bg-hover-strong active:scale-[.96]
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Icon name={allFolded ? "unfoldAll" : "foldAll"} className="h-3.5 w-3.5 text-dim" />
-              {allFolded ? "Развернуть все" : "Свернуть все"}
-            </button>
+            <FoldAll all={allFolded} onClick={() => setFolded(allFolded ? new Set() : new Set(files.map((f) => f.path)))} />
           )}
           {files && <FilesMenu files={files} onPick={pick} />}
         </div>
@@ -358,8 +377,7 @@ export default function JournalDiff({ project, entry, hash, target, theme, picke
                 <FileCard
                   key={file.path}
                   file={file}
-                  repo={project.repo}
-                  hash={hash}
+                  load={() => invoke<string>("git_file", { repo: project.repo, hash, path: file.path })}
                   target={i === targetIndex && target.from !== undefined ? target : null}
                   folded={folded.has(file.path)}
                   onToggle={() => toggle(file.path)}

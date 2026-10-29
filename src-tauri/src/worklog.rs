@@ -27,14 +27,14 @@ pub struct Worklog {
     projects: Vec<RawProject>,
 }
 
-fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .home_dir()
         .map(|home| home.join("Documents").join("Worklog"))
         .map_err(|e| e.to_string())
 }
 
-fn subdirs(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn subdirs(dir: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()
@@ -63,7 +63,7 @@ fn md_files(dir: &Path) -> Vec<RawFile> {
     files
 }
 
-fn dir_name(p: &Path) -> String {
+pub(crate) fn dir_name(p: &Path) -> String {
     p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
 }
 
@@ -85,7 +85,9 @@ pub fn worklog_read(app: tauri::AppHandle) -> Result<Worklog, String> {
     Ok(Worklog { root: root.to_string_lossy().to_string(), projects })
 }
 
-fn git(repo: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+pub(crate) const MAINLINE: [&str; 5] = ["origin/HEAD", "origin/main", "origin/master", "main", "master"];
+
+pub(crate) fn git(repo: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
     let mut cmd = Command::new("git");
     cmd.arg("-C").arg(repo).args(args);
     #[cfg(windows)]
@@ -113,7 +115,7 @@ pub async fn git_show(repo: String, hash: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-fn git_result(out: std::process::Output) -> Result<String, String> {
+pub(crate) fn git_result(out: std::process::Output) -> Result<String, String> {
     if out.status.success() {
         return Ok(String::from_utf8_lossy(&out.stdout).to_string());
     }
@@ -134,7 +136,7 @@ pub async fn git_mainline(repo: String) -> Result<String, String> {
     }
     tauri::async_runtime::spawn_blocking(move || {
         let mut last = Err("Основная ветка не найдена".to_string());
-        for branch in ["origin/HEAD", "origin/main", "origin/master", "main", "master"] {
+        for branch in MAINLINE {
             let out = git(&repo, &["log", "--first-parent", "--no-color", "--format=%H%x09%aI%x09%s", branch])
                 .map_err(|_| "Git не найден — установите Git for Windows".to_string())?;
             last = git_result(out);

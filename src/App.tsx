@@ -25,20 +25,25 @@ import FolderSidebar from "./components/FolderSidebar";
 import UnsavedDialog from "./components/UnsavedDialog";
 import { useToast } from "./components/Toast";
 import Journal from "./components/Journal";
+import Changes, { notesCount, readChangesMode, type ChangesSummary } from "./components/Changes";
 import PanelReveal from "./components/PanelReveal";
 import Icon from "./components/Icon";
 import { loadWorklog, type WorklogProject, type WorklogTask } from "./lib/worklog";
+import { gitCurrentBranch, gitWorktreeDiff, loadNotes } from "./lib/changes";
 import { plural } from "./lib/plural";
 
 const JOURNAL_PROJECT_KEY = "journal-project";
+const CHANGES_PROJECT_KEY = "changes-project";
 
-function readJournalProject() {
+function readStored(key: string) {
   try {
-    return localStorage.getItem(JOURNAL_PROJECT_KEY);
+    return localStorage.getItem(key);
   } catch {
     return null;
   }
 }
+
+const readJournalProject = () => readStored(JOURNAL_PROJECT_KEY);
 
 function App() {
   const toast = useToast();
@@ -59,6 +64,10 @@ function App() {
   const [journalEntry, setJournalEntry] = useState<string | null>(null);
   const [worklog, setWorklog] = useState<{ root: string; projects: WorklogProject[] } | null>(null);
   const [worklogError, setWorklogError] = useState<string | null>(null);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [changesProject, setChangesProject] = useState<string | null>(() => readStored(CHANGES_PROJECT_KEY));
+  const [notesDefault, setNotesDefault] = useState<string | null>(null);
+  const [changesInfo, setChangesInfo] = useState<ChangesSummary | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const closedPathRef = useRef<string | null>(null);
   const hasChangesRef = useRef(file.hasChanges);
@@ -66,6 +75,7 @@ function App() {
   const isFileOpen = file.filePath !== null || file.isDraft;
   const isPlain = file.filePath !== null && isPlainTextFile(file.filePath);
   const showJournal = journalOpen && !isFileOpen;
+  const showChanges = changesOpen && !journalOpen && !isFileOpen;
 
   const reloadWorklog = useCallback(() => {
     loadWorklog().then(
@@ -79,6 +89,38 @@ function App() {
 
   useEffect(reloadWorklog, [reloadWorklog]);
 
+  useEffect(() => {
+    loadNotes().then((list) => {
+      const last = list.filter((f) => f.doc).sort((a, b) => (b.doc?.updated ?? "").localeCompare(a.doc?.updated ?? ""))[0];
+      if (last) setNotesDefault(last.slug);
+    }, () => {});
+  }, []);
+
+  const changesTarget = useMemo(() => {
+    const list = (worklog?.projects ?? []).filter((p) => p.repo);
+    return list.find((p) => p.slug === changesProject) ?? list.find((p) => p.slug === notesDefault) ?? list[0] ?? null;
+  }, [worklog, changesProject, notesDefault]);
+
+  useEffect(() => {
+    if (!changesTarget || changesInfo?.slug === changesTarget.slug) return;
+    let alive = true;
+    const { slug, repo } = changesTarget;
+    Promise.all([gitCurrentBranch(repo), gitWorktreeDiff(repo, readChangesMode())]).then(
+      ([branch, patch]) => alive && setChangesInfo((prev) => prev?.slug === slug ? prev : { slug, branch, files: (patch.match(/^diff --git /gm) ?? []).length, notes: 0 }),
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [changesTarget, changesInfo?.slug]);
+
+  const handleSelectChangesProject = useCallback((slug: string) => {
+    setChangesProject(slug);
+    try {
+      localStorage.setItem(CHANGES_PROJECT_KEY, slug);
+    } catch {}
+  }, []);
+
   const activeTasks = useMemo(
     () => (worklog?.projects ?? [])
       .flatMap((project) => project.tasks.filter((task) => task.status !== "done").map((task) => ({ project, task })))
@@ -90,6 +132,7 @@ function App() {
 
   const handleOpenJournal = useCallback(() => {
     reloadWorklog();
+    setChangesOpen(false);
     setJournalOpen(true);
   }, [reloadWorklog]);
 
@@ -185,6 +228,7 @@ function App() {
         addRecentFile(result);
         setMode("view");
         setJournalOpen(false);
+        setChangesOpen(false);
       }
     });
   }, [guard, file, addRecentFile]);
@@ -200,6 +244,7 @@ function App() {
       file.newFile();
       setMode("edit");
       setJournalOpen(false);
+      setChangesOpen(false);
     });
   }, [guard, file.newFile]);
 
@@ -212,7 +257,10 @@ function App() {
     if (!isFileOpen) {
       if (journalEntry) setJournalEntry(null);
       else if (journalTask) setJournalTask(null);
-      else setJournalOpen(false);
+      else {
+        setJournalOpen(false);
+        setChangesOpen(false);
+      }
       return;
     }
     const path = file.filePath;
@@ -227,6 +275,7 @@ function App() {
     setJournalTask(null);
     setJournalEntry(null);
     setJournalOpen(false);
+    setChangesOpen(false);
   }, []);
 
   const handleGoHome = useCallback(() => {
@@ -253,6 +302,26 @@ function App() {
       show();
     });
   }, [isFileOpen, file, guard, handleOpenJournal, handleSelectJournalProject]);
+
+  const openChanges = useCallback(() => {
+    const show = () => {
+      setJournalTask(null);
+      setJournalEntry(null);
+      setJournalOpen(false);
+      setChangesOpen(true);
+    };
+    if (!isFileOpen) {
+      show();
+      return;
+    }
+    const path = file.filePath;
+    guard(() => {
+      closedPathRef.current = path;
+      file.closeFile();
+      setMode("view");
+      show();
+    });
+  }, [isFileOpen, file, guard]);
 
   const handleForward = useCallback(() => {
     const path = closedPathRef.current;
@@ -420,9 +489,15 @@ function App() {
 
       <div className="relative flex flex-1 overflow-hidden">
         <NavMenu
-          screen={showJournal ? "journal" : isFileOpen ? "file" : "home"}
+          screen={showJournal ? "journal" : showChanges ? "changes" : isFileOpen ? "file" : "home"}
           projects={worklog?.projects ?? []}
           journalProject={journalProject}
+          changes={changesTarget ? {
+            name: changesTarget.name,
+            branch: changesInfo?.slug === changesTarget.slug ? changesInfo.branch : "",
+            files: changesInfo?.slug === changesTarget.slug ? changesInfo.files : null,
+          } : null}
+          onChanges={openChanges}
           theme={theme}
           folder={folderPath ? (
             <FolderSidebar
@@ -459,6 +534,14 @@ function App() {
             entryFile={journalEntry}
             onEntry={setJournalEntry}
             onOpenTask={handleOpenTask}
+          />
+        ) : showChanges ? (
+          <Changes
+            projects={(worklog?.projects ?? []).filter((p) => p.repo)}
+            root={worklog?.root ?? ""}
+            project={changesTarget}
+            onProject={handleSelectChangesProject}
+            onSummary={setChangesInfo}
           />
         ) : !isFileOpen ? (
           <WelcomeScreen
@@ -533,6 +616,26 @@ function App() {
             {worklog.projects.length} {plural(worklog.projects.length, ["проект", "проекта", "проектов"])} ·{" "}
             {taskCount} {plural(taskCount, ["задача", "задачи", "задач"])}
           </span>
+        </div>
+      )}
+
+      {showChanges && changesTarget && (
+        <div className="flex h-8 shrink-0 select-none items-center justify-between gap-4 whitespace-nowrap px-5 pb-2
+          text-xs font-medium tabular-nums text-dim" title={changesTarget.repo}>
+          <span className="flex min-w-0 items-center gap-0.5 overflow-hidden">
+            {changesTarget.repo.split(/[\\/]/).filter(Boolean).slice(-3).map((part, i, all) => (
+              <span key={`${i}-${part}`} className="flex items-center gap-0.5">
+                {i > 0 && <Icon name="chevron" className="h-3 w-3 shrink-0 opacity-60" />}
+                <span className={i === all.length - 1 ? "px-1.5 text-fg" : "px-1.5"}>{part}</span>
+              </span>
+            ))}
+          </span>
+          {changesInfo?.slug === changesTarget.slug && (
+            <span>
+              {changesInfo.files} {plural(changesInfo.files, ["файл", "файла", "файлов"])}
+              {changesInfo.notes > 0 && ` · ${notesCount(changesInfo.notes)}`}
+            </span>
+          )}
         </div>
       )}
 

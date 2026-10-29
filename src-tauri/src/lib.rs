@@ -1,3 +1,4 @@
+mod changes;
 mod splash;
 mod worklog;
 
@@ -306,7 +307,12 @@ pub fn run() {
             worklog::worklog_read,
             worklog::git_show,
             worklog::git_file,
-            worklog::git_mainline
+            worklog::git_mainline,
+            changes::git_worktree_diff,
+            changes::git_current_branch,
+            changes::changes_watch,
+            changes::changes_unwatch,
+            changes::changes_notes
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
