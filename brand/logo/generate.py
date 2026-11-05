@@ -19,12 +19,13 @@ STROKE = 7.0
 VERTEX = 20.0
 FIELD = 1.0
 
-TOP = "#ffc233"
-BOTTOM = "#ff5a1f"
+TANGERINE = "#ff8e29"
 INK_LIGHT = "#17171a"
 INK_DARK = "#ececef"
 
+SOFT = 2.2
 SMALL = dict(stroke=6.4, span=22.0, vertex=19.0)
+SMALL_SOFT = SOFT * 0.92
 
 
 def arc(cx, cy, r, a0, a1, step=2.0):
@@ -45,6 +46,12 @@ def outline(stroke=STROKE, span=SPAN, d_ext=D_EXT, vertex=VERTEX):
     return shape.intersection(box(-100, 0, 200, HEIGHT))
 
 
+def soft(shape, r):
+    rounded = shape.buffer(-r, join_style="round").buffer(r, join_style="round")
+    inner = r * 0.6
+    return rounded.buffer(inner, join_style="round").buffer(-inner, join_style="round").simplify(0.01)
+
+
 def fitted(shape, width, cx=32.0, cy=32.0):
     x0, y0, x1, y1 = shape.bounds
     s = width / (x1 - x0)
@@ -62,15 +69,9 @@ def path_d(shape, s, tx, ty):
     return "".join(parts)
 
 
-def mark_body(shape, width, fill, cx=32.0, cy=32.0, gid="tangerine", top=TOP, bottom=BOTTOM):
+def mark_body(shape, width, fill=TANGERINE, cx=32.0, cy=32.0):
     s, tx, ty = fitted(shape, width, cx, cy)
-    d = path_d(shape, s, tx, ty)
-    if fill != "gradient":
-        return f'<path d="{d}" fill="{fill}"/>'
-    return (f'<defs><linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="0" y1="{ty:.2f}" x2="0" '
-            f'y2="{ty + s * HEIGHT:.2f}"><stop offset="0" stop-color="{top}"/>'
-            f'<stop offset="1" stop-color="{bottom}"/></linearGradient></defs>'
-            f'<path d="{d}" fill="url(#{gid})"/>')
+    return f'<path d="{path_d(shape, s, tx, ty)}" fill="{fill}"/>'
 
 
 def document(body, view="0 0 64 64", width=64, height=64):
@@ -109,21 +110,20 @@ def lockup(shape, ink):
     gap = mark_h * 0.42
     d, word_w = word("Markdown", cap, 12 + mark_w + gap, baseline)
     width = 12 + mark_w + gap + word_w + 12
-    body = (mark_body(shape, mark_w, "gradient", 12 + mark_w / 2, 32, "tangerine-lockup")
-            + f'<path d="{d}" fill="{ink}"/>')
+    body = mark_body(shape, mark_w, TANGERINE, 12 + mark_w / 2, 32) + f'<path d="{d}" fill="{ink}"/>'
     return document(body, f"0 0 {width:.2f} 64", f"{width:.2f}", 64)
 
 
 def main():
-    base = outline()
-    small = outline(**SMALL)
+    base = soft(outline(), SOFT)
+    small = soft(outline(**SMALL), SMALL_SOFT)
     width = 64 * FIELD
     files = {
-        "mark.svg": document(mark_body(base, width, "gradient")),
-        "mark-small.svg": document(mark_body(small, width, "gradient")),
+        "mark.svg": document(mark_body(base, width)),
+        "mark-small.svg": document(mark_body(small, width)),
         "mark-mono.svg": document(mark_body(base, width, "currentColor")),
-        "favicon.svg": document(mark_body(small, width, "gradient")),
-        "app-icon.svg": document(mark_body(base, width, "gradient"), width=1024, height=1024),
+        "favicon.svg": document(mark_body(small, width)),
+        "app-icon.svg": document(mark_body(base, width), width=1024, height=1024),
         "lockup.svg": lockup(base, INK_LIGHT),
         "lockup-on-dark.svg": lockup(base, INK_DARK),
     }

@@ -14,6 +14,8 @@
   !insertmacro TEXT_OPEN_WITH "text"
   !insertmacro TEXT_OPEN_WITH "log"
   System::Call "shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)"
+  nsExec::Exec '"$WINDIR\System32\ie4uinit.exe" -show'
+  Pop $0
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
