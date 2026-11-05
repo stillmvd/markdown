@@ -51,6 +51,8 @@
     --shadow-surface: 0 10px 26px rgb(0 0 0 / 14%);
     --shadow-pop: 0 14px 34px rgb(0 0 0 / 14%);
     --danger: #b3261e;
+    --ins-base: #587c0c;
+    --del-base: #ad0707;
     --scroll-thumb: var(--line);
     --scroll-thumb-hover: color-mix(in oklab, var(--line) 65%, var(--fg));
 
@@ -87,6 +89,8 @@
       --shadow-surface: 0 10px 26px rgb(0 0 0 / 50%);
       --shadow-pop: 0 14px 34px rgb(0 0 0 / 34%);
       --danger: #ff8a80;
+      --ins-base: #347d39;
+      --del-base: #c93c37;
 
       color-scheme: dark;
     }
@@ -102,7 +106,7 @@
   }
 
   ::selection {
-    background: var(--accent-soft);
+    background: color-mix(in srgb, var(--accent) 42%, transparent);
   }
 
   ::-webkit-scrollbar {
@@ -526,8 +530,10 @@ body:not([data-kbd]) .doc-fold:focus-visible {
   @apply font-mono;
   padding: 1px 7px;
   border-radius: 9999px;
-  background: var(--raised);
+  background: var(--hover-strong);
+  color: color-mix(in srgb, var(--accent) 60%, var(--fg));
   font-size: 0.86em;
+  white-space: nowrap;
 }
 
 .markdown-body blockquote {
@@ -592,6 +598,155 @@ body:not([data-kbd]) .doc-fold:focus-visible {
 .codeblock-copy:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
+}
+
+.codeblock-mode {
+  margin: 0 -8px 0 auto;
+  background: var(--hover-strong);
+  color: var(--fg);
+}
+
+.codeblock-mode:hover {
+  background: color-mix(in srgb, var(--fg) 18%, var(--raised));
+}
+
+.markdown-body .codeblock.is-split:not(:is(li, blockquote) *) {
+  width: 100cqi;
+  max-width: 100cqi;
+}
+
+.dd {
+  @apply font-mono;
+  padding: 4px 0 18px;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.dd-file + .dd-file {
+  margin-top: 8px;
+}
+
+.dd-stick {
+  position: sticky;
+  top: -40px;
+  z-index: 1;
+  container-type: scroll-state;
+}
+
+.dd-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  margin-bottom: 4px;
+  padding: 0 22px;
+  background: var(--hover-strong);
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition: box-shadow 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+@container scroll-state(stuck: top) {
+  .dd-bar {
+    box-shadow: 0 10px 14px -10px var(--press-shade);
+  }
+}
+
+.dd-path {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.dd-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+
+.dd-path b {
+  flex: none;
+  font-weight: 700;
+}
+
+.dd-count {
+  flex: none;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.dd-hunk {
+  display: flex;
+  gap: 10px;
+  padding: 6px 22px;
+  overflow: hidden;
+  color: var(--dim);
+  font-size: 12.5px;
+  white-space: pre;
+}
+
+.dd-hunk > :first-child {
+  opacity: 0.7;
+}
+
+.dd-scroll {
+  overflow-x: auto;
+}
+
+.dd-scroll::-webkit-scrollbar-track {
+  margin-inline: 20px;
+}
+
+.dd-rows {
+  width: max-content;
+  min-width: 100%;
+}
+
+.dd-row {
+  display: flex;
+  min-height: 1.65em;
+  padding-right: 22px;
+  white-space: pre;
+}
+
+.dd-sign {
+  flex: none;
+  width: 16px;
+  margin-left: 6px;
+  color: var(--dim);
+  user-select: none;
+}
+
+.dd-row.is-add {
+  background: color-mix(in srgb, var(--ins-base) 15%, transparent);
+}
+
+.dd-row.is-del {
+  background: color-mix(in srgb, var(--del-base) 15%, transparent);
+}
+
+.dd-row.is-add .dd-w {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ins-base) 38%, transparent);
+}
+
+.dd-row.is-del .dd-w {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--del-base) 38%, transparent);
+}
+
+.dd-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.dd-split > .dd-scroll:first-child {
+  border-right: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+}
+
+.dd-split .dd-row {
+  padding-right: 12px;
 }
 
 .markdown-body pre {
@@ -819,6 +974,7 @@ body:not([data-kbd]) .doc-fold:focus-visible {
 }
 
 .markdown-body :is(th, td) code {
+  white-space: normal;
   overflow-wrap: anywhere;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;

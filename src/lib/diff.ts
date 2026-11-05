@@ -117,7 +117,7 @@ export function highlightLines(lines: string[], lang: string | null): string[] {
   return out;
 }
 
-export function highlightHunk(hunk: DiffHunk, lang: string | null): string[] {
+export function highlightHunk(hunk: { lines: Pick<DiffLine, "kind" | "text">[] }, lang: string | null): string[] {
   const after = hunk.lines.filter((l) => l.kind !== "-");
   const before = hunk.lines.filter((l) => l.kind !== "+");
   const a = highlightLines(after.map((l) => l.text), lang);

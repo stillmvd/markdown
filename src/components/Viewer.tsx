@@ -7,6 +7,8 @@ import rehypeSlug from "rehype-slug";
 import rehypeRaw from "rehype-raw";
 import { expandWikiLinks, isTextFile, splitByHeadings, stripFrontmatter } from "../lib/markdown-utils";
 import type { HeadingSection } from "../types";
+import { useDiffSplit } from "../lib/docDiff";
+import DocDiff from "./DocDiff";
 import SearchBar from "./SearchBar";
 import { useToast } from "./Toast";
 
@@ -88,17 +90,42 @@ const COPY = (
   </svg>
 );
 
+const SPLIT_ICON = (
+  <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+    <g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+      <rect x="2.25" y="2.75" width="11.5" height="10.5" rx="2" />
+      <path d="M8 2.75v10.5" />
+    </g>
+  </svg>
+);
+
+const UNIFIED_ICON = (
+  <svg viewBox="0 0 16 16" className="h-4 w-4" aria-hidden="true">
+    <path d="M3 4.25h10M3 8h10M3 11.75h10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+type HastNode = { type: string; value?: string; children?: HastNode[] };
+
+function hastText(node: HastNode | undefined): string {
+  if (!node) return "";
+  if (node.type === "text") return node.value ?? "";
+  return (node.children ?? []).map(hastText).join("");
+}
+
 function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & ExtraProps) {
   const toast = useToast();
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [split, toggleSplit] = useDiffSplit();
   const codeClass = isValidElement<{ className?: string }>(children) ? children.props.className ?? "" : "";
   const languageId = codeClass.match(/language-([\w+#-]+)/)?.[1]?.toLowerCase();
   const language = languageId ? LANGUAGE_NAMES[languageId] ?? languageId : "";
+  const diff = languageId === "diff" || languageId === "patch" ? hastText(node as HastNode | undefined) : null;
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(preRef.current?.innerText ?? "");
+      await navigator.clipboard.writeText(diff ?? preRef.current?.innerText ?? "");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
       toast("Код скопирован");
@@ -109,9 +136,20 @@ function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & E
   };
 
   return (
-    <div className="codeblock">
+    <div className={`codeblock${diff !== null && split ? " is-split" : ""}`}>
       <div className="codeblock-head">
         <span className="codeblock-lang">{language}</span>
+        {diff !== null && (
+          <button
+            type="button"
+            className="codeblock-copy codeblock-mode"
+            onClick={toggleSplit}
+            title={split ? "В одну колонку" : "В две колонки"}
+            aria-label={split ? "Показать в одну колонку" : "Показать в две колонки"}
+          >
+            {split ? UNIFIED_ICON : SPLIT_ICON}
+          </button>
+        )}
         <button
           type="button"
           className="codeblock-copy"
@@ -122,7 +160,7 @@ function CodeBlock({ node, children, ...props }: React.ComponentProps<"pre"> & E
           {copied ? <span className="h-4 w-4">{CHECK}</span> : COPY}
         </button>
       </div>
-      <pre ref={preRef} {...props}>{children}</pre>
+      {diff !== null ? <DocDiff raw={diff} split={split} /> : <pre ref={preRef} {...props}>{children}</pre>}
     </div>
   );
 }
