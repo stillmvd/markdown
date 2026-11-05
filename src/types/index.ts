@@ -15,6 +15,7 @@ export interface HeadingSection {
   title: string;
   content: string;
   id: string;
+  line: number;
 }
 
 export interface FileEntry {

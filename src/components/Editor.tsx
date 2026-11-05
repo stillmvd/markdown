@@ -1,15 +1,21 @@
-import { useCallback, useRef, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
+import { useCallback, useEffect, useRef, useState } from "react";
+import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { editorBasicSetup, editorExtensions, getEditorTheme, plainEditorExtensions } from "../lib/codemirror-setup";
+import type { ScrollSyncRef } from "../lib/scrollSync";
 import type { Theme } from "../types";
 import ContextMenu from "./ContextMenu";
-import type { EditorView } from "@codemirror/view";
 
 interface EditorProps {
   content: string;
   onChange: (value: string) => void;
   theme: Theme;
   plain: boolean;
+  scrollSync: ScrollSyncRef;
+}
+
+function topLine(view: EditorView) {
+  const height = view.scrollDOM.getBoundingClientRect().top - view.documentTop;
+  return view.state.doc.lineAt(view.lineBlockAtHeight(Math.max(0, height)).from).number;
 }
 
 interface MenuPos {
@@ -17,9 +23,27 @@ interface MenuPos {
   y: number;
 }
 
-export default function Editor({ content, onChange, theme, plain }: EditorProps) {
+export default function Editor({ content, onChange, theme, plain, scrollSync }: EditorProps) {
   const viewRef = useRef<EditorView | null>(null);
   const [menuPos, setMenuPos] = useState<MenuPos | null>(null);
+
+  useEffect(() => {
+    const sync = scrollSync.current;
+    sync.read = () => (viewRef.current ? topLine(viewRef.current) : null);
+    return () => {
+      sync.read = null;
+    };
+  }, [scrollSync]);
+
+  const handleCreate = useCallback((view: EditorView) => {
+    viewRef.current = view;
+    const sync = scrollSync.current;
+    const line = sync.line;
+    sync.line = null;
+    if (line === null || line <= 1) return;
+    const pos = view.state.doc.line(Math.min(line, view.state.doc.lines)).from;
+    view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "start" }) });
+  }, [scrollSync]);
 
   const closeMenu = useCallback(() => {
     setMenuPos(null);
@@ -105,9 +129,7 @@ export default function Editor({ content, onChange, theme, plain }: EditorProps)
           basicSetup={editorBasicSetup}
           height="100%"
           style={{ height: "100%" }}
-          onCreateEditor={(view) => {
-            viewRef.current = view;
-          }}
+          onCreateEditor={handleCreate}
         />
 
         {menuPos && (

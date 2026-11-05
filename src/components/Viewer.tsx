@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, isValidElement } from "react";
+import { useState, useMemo, useCallback, useLayoutEffect, useRef, isValidElement } from "react";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import ReactMarkdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,6 +8,7 @@ import rehypeRaw from "rehype-raw";
 import { expandWikiLinks, isTextFile, splitByHeadings, stripFrontmatter } from "../lib/markdown-utils";
 import type { HeadingSection } from "../types";
 import { useDiffSplit } from "../lib/docDiff";
+import { rehypeSourceLines, scrollViewerToLine, viewerTopLine, type ScrollSyncRef } from "../lib/scrollSync";
 import DocDiff from "./DocDiff";
 import SearchBar from "./SearchBar";
 import { useToast } from "./Toast";
@@ -21,6 +22,7 @@ interface ViewerProps {
   plain: boolean;
   showSearch: boolean;
   onCloseSearch: () => void;
+  scrollSync: ScrollSyncRef;
 }
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -223,9 +225,10 @@ function makeComponents(baseDir: string | null, rootDir: string | null): Compone
   };
 }
 
-function Markdown({ content, components }: { content: string; components: Components }) {
+function Markdown({ content, components, offset }: { content: string; components: Components; offset: number }) {
+  const plugins = useMemo(() => [...REHYPE_PLUGINS, rehypeSourceLines(offset)], [offset]);
   return (
-    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS} components={components}>
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={plugins} components={components}>
       {content}
     </ReactMarkdown>
   );
@@ -248,27 +251,41 @@ function HeadingTag({ level, id, children }: {
   }
 }
 
+const INLINE_COMPONENTS: Components = { p: ({ children }) => <>{children}</> };
+const INLINE_MARKUP = /[`*_[\]<\\~]/;
+
+function InlineMarkdown({ text }: { text: string }) {
+  if (!INLINE_MARKUP.test(text)) return <>{text}</>;
+  return (
+    <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={INLINE_COMPONENTS}>
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 function HeadingTitle({ level, title }: { level: number; title: string }) {
   const space = title.indexOf(" ");
-  if (level !== 1 || space < 0) return <>{title}</>;
+  const first = space < 0 ? "" : title.slice(0, space);
+  if (level !== 1 || !first || INLINE_MARKUP.test(first)) return <InlineMarkdown text={title} />;
   return (
     <>
-      <span className="title-light">{title.slice(0, space)}</span>
-      {title.slice(space)}
+      <span className="title-light">{first}</span>{" "}
+      <InlineMarkdown text={title.slice(space + 1)} />
     </>
   );
 }
 
-function CollapsibleSection({ section, components }: { section: HeadingSection; components: Components }) {
+function CollapsibleSection({ section, components, front }: { section: HeadingSection; components: Components; front: number }) {
   const [collapsed, setCollapsed] = useState(false);
+  const offset = front + section.line;
 
   if (section.level === 0) {
-    return <Markdown content={section.content} components={components} />;
+    return <Markdown content={section.content} components={components} offset={offset} />;
   }
 
   return (
     <section className={`doc-section level-${section.level}${collapsed ? " is-collapsed" : ""}`}>
-      <div className="doc-section-head" onClick={() => setCollapsed(!collapsed)}>
+      <div className="doc-section-head" data-line={offset} onClick={() => setCollapsed(!collapsed)}>
         <button
           type="button"
           className="doc-fold"
@@ -282,19 +299,33 @@ function CollapsibleSection({ section, components }: { section: HeadingSection; 
         </HeadingTag>
       </div>
       <div className="doc-section-body" hidden={collapsed}>
-        <Markdown content={section.content} components={components} />
+        <Markdown content={section.content} components={components} offset={offset} />
       </div>
     </section>
   );
 }
 
-export default function Viewer({ content, filePath, folderPath, onOpenFile, sheetRef, plain, showSearch, onCloseSearch }: ViewerProps) {
+export default function Viewer({ content, filePath, folderPath, onOpenFile, sheetRef, plain, showSearch, onCloseSearch, scrollSync }: ViewerProps) {
   const toast = useToast();
   const baseDir = filePath ? dirOf(filePath) : null;
-  const sections = useMemo(
-    () => (plain ? [] : splitByHeadings(expandWikiLinks(stripFrontmatter(content)))),
-    [plain, content],
-  );
+  const { sections, front } = useMemo(() => {
+    if (plain) return { sections: [], front: 0 };
+    const body = stripFrontmatter(content);
+    const front = content.slice(0, content.length - body.length).split("\n").length - 1;
+    return { sections: splitByHeadings(expandWikiLinks(body)), front };
+  }, [plain, content]);
+  const totalLines = useMemo(() => content.split("\n").length, [content]);
+
+  useLayoutEffect(() => {
+    const sync = scrollSync.current;
+    const sheet = sheetRef.current;
+    if (sheet && sync.line !== null) scrollViewerToLine(sheet, sync.line, totalLines);
+    sync.line = null;
+    sync.read = () => (sheetRef.current ? viewerTopLine(sheetRef.current, totalLines) : null);
+    return () => {
+      sync.read = null;
+    };
+  }, [scrollSync, sheetRef, totalLines]);
   const components = useMemo(
     () => makeComponents(baseDir, folderPath),
     [baseDir, folderPath],
@@ -343,7 +374,7 @@ export default function Viewer({ content, filePath, folderPath, onOpenFile, shee
           ) : (
             <article className="markdown-body">
               {sections.map((section, i) => (
-                <CollapsibleSection key={`${section.id}-${i}`} section={section} components={components} />
+                <CollapsibleSection key={`${section.id}-${i}`} section={section} components={components} front={front} />
               ))}
             </article>
           )}

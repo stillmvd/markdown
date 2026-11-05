@@ -42,11 +42,13 @@ export function splitByHeadings(markdown: string): HeadingSection[] {
     if (currentSection) {
       currentSection.content = contentLines.join("\n");
       sections.push(currentSection);
-      contentLines = [];
+    } else if (contentLines.some((l) => l.trim())) {
+      sections.push({ level: 0, title: "", content: contentLines.join("\n"), id: "root", line: 0 });
     }
+    contentLines = [];
   };
 
-  for (const line of lines) {
+  lines.forEach((line, i) => {
     const match = line.match(/^(#{1,6})\s+(.+)$/);
     if (match) {
       flushSection();
@@ -56,22 +58,13 @@ export function splitByHeadings(markdown: string): HeadingSection[] {
         .toLowerCase()
         .replace(/[^\w\s-]/g, "")
         .replace(/\s+/g, "-");
-      currentSection = { level, title, content: "", id };
+      currentSection = { level, title, content: "", id, line: i + 1 };
     } else {
       contentLines.push(line);
     }
-  }
+  });
 
   flushSection();
-
-  if (!sections.length && markdown.trim()) {
-    sections.push({
-      level: 0,
-      title: "",
-      content: markdown,
-      id: "root",
-    });
-  }
 
   return sections;
 }

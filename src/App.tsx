@@ -31,6 +31,7 @@ import Icon from "./components/Icon";
 import { loadWorklog, type WorklogProject, type WorklogTask } from "./lib/worklog";
 import { gitCurrentBranch, gitWorktreeDiff, loadNotes } from "./lib/changes";
 import { plural } from "./lib/plural";
+import type { ScrollSync } from "./lib/scrollSync";
 
 const JOURNAL_PROJECT_KEY = "journal-project";
 const CHANGES_PROJECT_KEY = "changes-project";
@@ -69,6 +70,7 @@ function App() {
   const [notesDefault, setNotesDefault] = useState<string | null>(null);
   const [changesInfo, setChangesInfo] = useState<ChangesSummary | null>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const scrollSync = useRef<ScrollSync>({ read: null, line: null });
   const closedPathRef = useRef<string | null>(null);
   const hasChangesRef = useRef(file.hasChanges);
 
@@ -366,6 +368,7 @@ function App() {
   }, [handleSave, runPendingAction, cancelPendingAction]);
 
   const handleToggleMode = useCallback(() => {
+    scrollSync.current.line = scrollSync.current.read?.() ?? null;
     setMode((prev) => (prev === "view" ? "edit" : "view"));
   }, []);
 
@@ -564,6 +567,7 @@ function App() {
                 plain={isPlain}
                 showSearch={showSearch}
                 onCloseSearch={closeSearch}
+                scrollSync={scrollSync}
               />
             ) : (
               <Editor
@@ -571,6 +575,7 @@ function App() {
                 onChange={file.setContent}
                 theme={theme}
                 plain={isPlain}
+                scrollSync={scrollSync}
               />
             )}
             <DocBar
